@@ -1,0 +1,30 @@
+{
+  "schema_version": "0.2.0",
+  "project_id": "XMI-MODE-DEMO",
+  "title": "Mode Demo",
+  "profile": "web-micro-saas-v0",
+  "delivery_policy": {
+    "requested_mode": "FAST_DEVELOPMENT",
+    "effective_mode": "FAST_DEVELOPMENT",
+    "readiness_target": "BUILD_READY",
+    "selection_source": "OWNER_CONFIRMED",
+    "selected_at": "2026-09-05T11:00:00Z",
+    "history": [
+      {
+        "from_mode": null,
+        "to_mode": "FAST_DEVELOPMENT",
+        "reason": "Owner needs a reviewed MVP for early users.",
+        "changed_by": "owner",
+        "changed_at": "2026-09-05T11:00:00Z"
+      }
+    ],
+    "risk_overrides": []
+  },
+  "lifecycle_state": "READY_FOR_XDEV",
+  "model_version": 4,
+  "items": [],
+  "open_questions": [],
+  "current_xspec_version": "0.2.0",
+  "created_at": "2026-09-05T10:00:00Z",
+  "updated_at": "2026-09-05T12:00:00Z"
+}

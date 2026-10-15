@@ -1,0 +1,251 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://xmi.example/schemas/readiness-report.schema.json",
+  "title": "XMi Readiness Report 0.2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "project_id",
+    "product_model_version",
+    "target_mode",
+    "target_level",
+    "achieved_level",
+    "assurance_level",
+    "mode_gap_count",
+    "status",
+    "hard_gates",
+    "findings",
+    "evaluated_at"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "0.2.0"
+    },
+    "project_id": {
+      "type": "string"
+    },
+    "product_model_version": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "NOT_READY",
+        "READY_FOR_XDEV"
+      ]
+    },
+    "hard_gates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "passed"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "passed": {
+            "type": "boolean"
+          },
+          "details": {
+            "type": "string"
+          },
+          "affected_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "severity",
+          "category",
+          "message"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "INFO",
+              "WARNING",
+              "BLOCKING"
+            ]
+          },
+          "category": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "affected_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "suggested_question": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "dimensions": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 100
+      }
+    },
+    "audit_run_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "evaluated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "target_mode": {
+      "type": "string",
+      "enum": [
+        "FAST_VALIDATION",
+        "FAST_DEVELOPMENT",
+        "PRODUCT_GRADE"
+      ]
+    },
+    "target_level": {
+      "type": "string",
+      "enum": [
+        "PROTOTYPE_READY",
+        "BUILD_READY",
+        "PRODUCT_SPEC_READY"
+      ]
+    },
+    "achieved_level": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "PROTOTYPE_READY",
+        "BUILD_READY",
+        "PRODUCT_SPEC_READY",
+        null
+      ]
+    },
+    "assurance_level": {
+      "type": "string",
+      "enum": [
+        "BASIC_SELF_CHECK",
+        "INDEPENDENT_SPEC_REVIEW",
+        "INDEPENDENT_PRODUCT_AUDIT"
+      ]
+    },
+    "mode_gap_count": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "target_mode": {
+            "const": "FAST_VALIDATION"
+          }
+        },
+        "required": [
+          "target_mode"
+        ]
+      },
+      "then": {
+        "properties": {
+          "target_level": {
+            "const": "PROTOTYPE_READY"
+          },
+          "assurance_level": {
+            "const": "BASIC_SELF_CHECK"
+          }
+        },
+        "required": [
+          "target_level",
+          "assurance_level"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "target_mode": {
+            "const": "FAST_DEVELOPMENT"
+          }
+        },
+        "required": [
+          "target_mode"
+        ]
+      },
+      "then": {
+        "properties": {
+          "target_level": {
+            "const": "BUILD_READY"
+          },
+          "assurance_level": {
+            "const": "INDEPENDENT_SPEC_REVIEW"
+          }
+        },
+        "required": [
+          "target_level",
+          "assurance_level"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "target_mode": {
+            "const": "PRODUCT_GRADE"
+          }
+        },
+        "required": [
+          "target_mode"
+        ]
+      },
+      "then": {
+        "properties": {
+          "target_level": {
+            "const": "PRODUCT_SPEC_READY"
+          },
+          "assurance_level": {
+            "const": "INDEPENDENT_PRODUCT_AUDIT"
+          }
+        },
+        "required": [
+          "target_level",
+          "assurance_level"
+        ]
+      }
+    }
+  ]
+}

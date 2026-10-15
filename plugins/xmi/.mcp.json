@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "xmi": {
+      "command": "<abs-path-to-node>",
+      "args": [
+        "<abs-path-to-xmi-repo>/apps/mcp-server/main.ts",
+        "--db",
+        "<abs-path-to-xmi-state.sqlite>"
+      ]
+    }
+  }
+}

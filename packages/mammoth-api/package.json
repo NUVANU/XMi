@@ -1,0 +1,35 @@
+{
+  "name": "@xmi/mammoth-api",
+  "version": "1.12.3-xmi.1",
+  "private": true,
+  "type": "commonjs",
+  "license": "BSD-2-Clause",
+  "description": "XMi-managed API-only derivative of Mammoth 1.12.3; upstream parsing sources unchanged.",
+  "main": "./lib/index.js",
+  "types": "./lib/index.d.ts",
+  "browser": {
+    "./lib/unzip.js": "./browser/unzip.js",
+    "./lib/docx/files.js": "./browser/docx/files.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./browser": {
+      "types": "./lib/index.d.ts",
+      "default": "./browser.cjs"
+    }
+  },
+  "dependencies": {
+    "@xmldom/xmldom": "^0.8.6",
+    "base64-js": "^1.5.1",
+    "bluebird": "~3.4.0",
+    "dingbat-to-unicode": "^1.0.1",
+    "jszip": "^3.7.1",
+    "lop": "^0.4.2",
+    "path-is-absolute": "^1.0.0",
+    "underscore": "^1.13.1",
+    "xmlbuilder": "^10.0.0"
+  }
+}

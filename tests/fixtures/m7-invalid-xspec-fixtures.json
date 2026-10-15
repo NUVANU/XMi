@@ -1,0 +1,8 @@
+[
+  {"id":"false-readiness-claim","mutation":"READY_STATUS","expected_code":"FALSE_READINESS_CLAIM_M8"},
+  {"id":"broken-reference","mutation":"BROKEN_REFERENCE","expected_code":"XSPEC_REFERENCE_NOT_FOUND"},
+  {"id":"p0-without-ac","mutation":"MISSING_AC","expected_code":"XSPEC_AC_COVERAGE_REQUIRED"},
+  {"id":"integrity-mismatch","mutation":"INTEGRITY","expected_code":"XSPEC_INTEGRITY_MISMATCH"},
+  {"id":"unsupported-handoff-version","mutation":"HANDOFF_VERSION","expected_code":"HANDOFF_CONTRACT_UNSUPPORTED"},
+  {"id":"minimum-below-project","mutation":"MINIMUM_BELOW_PROJECT","expected_code":"SCOPE_OVERRIDE_MINIMUM_BELOW_PROJECT"}
+]

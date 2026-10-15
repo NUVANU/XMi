@@ -1,0 +1,11 @@
+[
+  {"id":"hidden-assumption","kind":"hidden assumptions","mutation":"ADD_HIDDEN_ASSUMPTION","expected_category":"HIDDEN_ASSUMPTION","expected":"NOT_READY"},
+  {"id":"no-data-isolation","kind":"no data isolation","mutation":"REMOVE_DATA_ISOLATION","expected_category":"DATA_ISOLATION","expected":"NOT_READY"},
+  {"id":"missing-account-deletion","kind":"missing account deletion","mutation":"REMOVE_ACCOUNT_DELETION","expected_category":"ACCOUNT_DELETION","expected":"NOT_READY"},
+  {"id":"payment-success-no-failure","kind":"payment success but no payment failure behavior","mutation":"ADD_PAYMENT_SUCCESS_ONLY","expected_category":"PAYMENT_FAILURE","expected":"NOT_READY"},
+  {"id":"untestable-smart-ai","kind":"untestable smart AI requirement","mutation":"ADD_UNTESTABLE_SMART_AI","expected_category":"UNTESTABLE_AI_REQUIREMENT","expected":"NOT_READY"},
+  {"id":"contradictory-roles","kind":"contradictory roles","mutation":"ADD_ROLE_CONTRADICTION","expected_category":"CONTRADICTORY_ROLES","expected":"NOT_READY"},
+  {"id":"solution-offline-mismatch","kind":"solution violates offline/privacy constraint","mutation":"MAKE_SOLUTION_OFFLINE_MISMATCH","expected_category":"SOLUTION_CONSTRAINT_MISMATCH","expected":"NOT_READY"},
+  {"id":"stale-model-recommendation","kind":"stale model recommendation","mutation":"ADD_STALE_MODEL_RESOLUTION","expected_category":"STALE_MODEL_RECOMMENDATION","expected":"NOT_READY"},
+  {"id":"high-score-hidden-blocker","kind":"unresolved blocker concealed by high score","mutation":"ADD_HIDDEN_BLOCKER","expected_category":"UNRESOLVED_BLOCKER","expected":"NOT_READY"}
+]

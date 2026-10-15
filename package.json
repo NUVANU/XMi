@@ -1,0 +1,40 @@
+{
+  "name": "xmi",
+  "version": "0.1.0-alpha.1",
+  "description": "Clarify product intent through module interviews into a traceable XSpec.",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "24.20.0",
+    "npm": "11.19.0"
+  },
+  "packageManager": "npm@11.19.0",
+  "scripts": {
+    "mcp": "node dist/apps/mcp-server/main.js",
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint apps packages tests tools eslint.config.mjs --max-warnings 0",
+    "test": "node --test tests/*.test.ts",
+    "configure": "node tools/configure.mjs",
+    "check": "node tools/self-check.mjs",
+    "check:docx-source": "node tools/prepare-docx-api.mjs --check",
+    "build:docx-browser": "node tools/build-docx-browser.mjs",
+    "package:release": "node tools/package-release.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.4",
+    "eslint": "10.10.0",
+    "esbuild": "0.28.2",
+    "jszip": "3.10.2",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.70.0"
+  },
+  "dependencies": {
+    "@xmi/mammoth-api": "file:packages/mammoth-api",
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1",
+    "pdfjs-dist": "6.3.289",
+    "zod": "4.6.5"
+  }
+}

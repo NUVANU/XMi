@@ -1,0 +1,31 @@
+{
+  "schema_version": "0.2.0",
+  "project_id": "XMI-MODE-DEMO",
+  "product_model_version": 4,
+  "target_mode": "FAST_DEVELOPMENT",
+  "target_level": "BUILD_READY",
+  "achieved_level": "BUILD_READY",
+  "assurance_level": "INDEPENDENT_SPEC_REVIEW",
+  "mode_gap_count": 0,
+  "status": "READY_FOR_XDEV",
+  "hard_gates": [
+    {
+      "id": "MODE_SELECTED",
+      "passed": true,
+      "details": "Owner confirmed the project delivery mode."
+    },
+    {
+      "id": "NO_MODE_RISK_BLOCKER",
+      "passed": true,
+      "details": "No unresolved scoped mode override."
+    }
+  ],
+  "findings": [],
+  "dimensions": {
+    "vision": 100,
+    "requirements": 95,
+    "testability": 95
+  },
+  "audit_run_id": "AUDIT-DEMO-FAST-001",
+  "evaluated_at": "2026-09-05T12:00:00Z"
+}

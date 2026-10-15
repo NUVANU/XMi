@@ -1,0 +1,454 @@
+[
+  {
+    "id": "explicit-proposal-not-confirmed",
+    "invocation": "explicit",
+    "request": "$xmi-discovery 我想做社区工具预约，帮我理清范围。",
+    "steps": [
+      {
+        "kind": "assistant",
+        "text": "先弄清第一版要解决什么，暂时不生成最终规格。",
+        "questions": [
+          "谁会借用工具？",
+          "最重要的一次预约流程是什么？"
+        ],
+        "claims": {
+          "confirmed_ids": [],
+          "selected_mode": null,
+          "saved": false,
+          "readiness": "NOT_EVALUATED",
+          "final_spec": false,
+          "confirmation_mechanism_verified": false,
+          "implementation_tasks": []
+        }
+      },
+      {
+        "kind": "tool",
+        "name": "xmi_project_create",
+        "args": {
+          "schema_version": "0.1.0",
+          "initial_idea": "居民预约共享工具",
+          "source_ref": {
+            "type": "conversation_turn",
+            "ref": "fixture:owner"
+          },
+          "idempotency_key": "intake"
+        },
+        "form": "accept",
+        "expect": {
+          "ok": true,
+          "version": 1,
+          "first_status": "PROPOSED"
+        }
+      },
+      {
+        "kind": "tool",
+        "name": "xmi_project_get",
+        "args": {
+          "schema_version": "0.1.0",
+          "project_id": "$project_id"
+        },
+        "form": "none",
+        "expect": {
+          "ok": true
+        }
+      },
+      {
+        "kind": "user",
+        "text": "居民想预约钻孔机，但是否收费还不知道。"
+      },
+      {
+        "kind": "tool",
+        "name": "xmi_answer_analyze",
+        "args": {
+          "schema_version": "0.1.0",
+          "project_id": "$project_id",
+          "expected_version": "$version",
+          "answer": "居民想预约钻孔机，但是否收费还不知道。",
+          "item_id": "REQ-BOOK",
+          "item_type": "functional_requirement",
+          "source_ref": {
+            "type": "conversation_turn",
+            "ref": "fixture:owner"
+          }
+        },
+        "form": "none",
+        "expect": {
+          "ok": true,
+          "version": 1
+        }
+      },
+      {
+        "kind": "tool",
+        "name": "xmi_patch_apply",
+        "args": {
+          "schema_version": "0.1.0",
+          "project_id": "$project_id",
+          "expected_version": "$version",
+          "idempotency_key": "candidate",
+          "patch": "$result.data.proposed_patch"
+        },
+        "form": "accept",
+        "expect": {
+          "ok": true,
+          "version": 2,
+          "first_status": "PROPOSED"
+        }
+      },
+      {
+        "kind": "tool",
+        "name": "xmi_project_get",
+        "args": {
+          "schema_version": "0.1.0",
+          "project_id": "$project_id"
+        },
+        "form": "none",
+        "expect": {
+          "ok": true
+        }
+      },
+      {
+        "kind": "user",
+        "text": "听起来不错。"
+      },
+      {
+        "kind": "assistant",
+        "text": "建议已经保存为待确认候选；这不等于你已批准，收费问题仍未定。",
+        "questions": [
+          "是否先只讨论不收费的预约流程，还是现在比较收费选项？"
+        ],
+        "claims": {
+          "confirmed_ids": [],
+          "selected_mode": null,
+          "saved": false,
+          "readiness": "NOT_EVALUATED",
+          "final_spec": false,
+          "confirmation_mechanism_verified": false,
+          "implementation_tasks": []
+        }
+      },
+      {
+        "kind": "tool",
+        "name": "xmi_item_confirm",
+        "args": {
+          "schema_version": "0.1.0",
+          "project_id": "$project_id",
+          "expected_version": "$version",
+          "idempotency_key": "confirm",
+          "item_id": "$item.id",
+          "item_version": "$item.version",
+          "fingerprint": "$item.fingerprint",
+          "intent": "CONFIRM"
+        },
+        "form": "decline",
+        "expect": {
+          "ok": false,
+          "code": "OWNER_DECLINED",
+          "version": 2,
+          "first_status": "PROPOSED"
+        }
+      },
+      {
+        "kind": "assistant",
+        "text": "确认窗口被拒绝，条目仍是待确认状态。",
+        "questions": [
+          "要修改哪一部分，还是先暂停？"
+        ],
+        "claims": {
+          "confirmed_ids": [],
+          "selected_mode": null,
+          "saved": false,
+          "readiness": "NOT_EVALUATED",
+          "final_spec": false,
+          "confirmation_mechanism_verified": false,
+          "implementation_tasks": []
+        }
+      }
+    ]
+  },
+  {
+    "id": "implicit-mode-and-exact-confirm",
+    "invocation": "implicit",
+    "request": "我不会编程，只想先做预约原型试试，帮我一步步弄清第一版。",
+    "steps": [
+      {
+        "kind": "assistant",
+        "text": "我们先围绕可试用的原型梳理，不把它当成生产就绪产品。",
+        "questions": [
+          "第一次使用时，用户最需要完成什么？"
+        ],
+        "claims": {
+          "confirmed_ids": [],
+          "selected_mode": null,
+          "saved": false,
+          "readiness": "NOT_EVALUATED",
+          "final_spec": false,
+          "confirmation_mechanism_verified": false,
+          "implementation_tasks": []
+        }
+      },
+      {
+        "kind": "tool",
+        "name": "xmi_project_create",
+        "args": {
+          "schema_version": "0.1.0",
+          "initial_idea": "居民预约共享工具",
+          "source_ref": {
+            "type": "conversation_turn",
+            "ref": "fixture:owner"
+          },
+          "idempotency_key": "intake"
+        },
+        "form": "accept",
+        "expect": {
+          "ok": true,
+          "version": 1,
+          "first_status": "PROPOSED"
+        }
+      },
+      {
+        "kind": "tool",
+        "name": "xmi_project_get",
+        "args": {
+          "schema_version": "0.1.0",
+          "project_id": "$project_id"
+        },
+        "form": "none",
+        "expect": {
+          "ok": true
+        }
+      },
+      {
+        "kind": "tool",
+        "name": "xmi_delivery_mode_recommend",
+        "args": {
+          "schema_version": "0.1.0",
+          "project_id": "$project_id",
+          "intended_outcome": "PROTOTYPE"
+        },
+        "form": "none",
+        "expect": {
+          "ok": true,
+          "version": 1
+        }
+      },
+      {
+        "kind": "tool",
+        "name": "xmi_delivery_mode_get",
+        "args": {
+          "schema_version": "0.1.0",
+          "project_id": "$project_id",
+          "proposal": {
+            "mode": "FAST_VALIDATION",
+            "reason": "先验证预约想法"
+          }
+        },
+        "form": "none",
+        "expect": {
+          "ok": true
+        }
+      },
+      {
+        "kind": "tool",
+        "name": "xmi_delivery_mode_select",
+        "args": {
+          "schema_version": "0.1.0",
+          "project_id": "$project_id",
+          "expected_version": "$version",
+          "idempotency_key": "select",
+          "mode": "FAST_VALIDATION",
+          "reason": "先验证预约想法",
+          "fingerprint": "$result.data.proposal_fingerprint",
+          "intent": "SELECT_MODE",
+          "change": "SELECT"
+        },
+        "form": "accept",
+        "expect": {
+          "ok": true,
+          "version": 2,
+          "mode": "FAST_VALIDATION"
+        }
+      },
+      {
+        "kind": "tool",
+        "name": "xmi_project_get",
+        "args": {
+          "schema_version": "0.1.0",
+          "project_id": "$project_id"
+        },
+        "form": "none",
+        "expect": {
+          "ok": true
+        }
+      },
+      {
+        "kind": "user",
+        "text": "请让我确认刚才那条社区工具预约的具体需求。"
+      },
+      {
+        "kind": "tool",
+        "name": "xmi_item_confirm",
+        "args": {
+          "schema_version": "0.1.0",
+          "project_id": "$project_id",
+          "expected_version": "$version",
+          "idempotency_key": "confirm",
+          "item_id": "$item.id",
+          "item_version": "$item.version",
+          "fingerprint": "$item.fingerprint",
+          "intent": "CONFIRM"
+        },
+        "form": "accept",
+        "expect": {
+          "ok": true,
+          "version": 3,
+          "first_status": "CONFIRMED"
+        }
+      },
+      {
+        "kind": "tool",
+        "name": "xmi_project_get",
+        "args": {
+          "schema_version": "0.1.0",
+          "project_id": "$project_id"
+        },
+        "form": "none",
+        "expect": {
+          "ok": true
+        }
+      },
+      {
+        "kind": "assistant",
+        "text": "工具结果和刷新后的状态记录了这条确认。交付目标是快速验证，尚未经过可交付评估。",
+        "questions": [
+          "用户能在预约后取消吗？"
+        ],
+        "claims": {
+          "confirmed_ids": [
+            "$item.id"
+          ],
+          "selected_mode": "FAST_VALIDATION",
+          "saved": true,
+          "readiness": "NOT_EVALUATED",
+          "final_spec": false,
+          "confirmation_mechanism_verified": false,
+          "implementation_tasks": []
+        }
+      }
+    ]
+  },
+  {
+    "id": "resume-no-transcript",
+    "invocation": "implicit",
+    "request": "继续我的项目，不要我重贴全部聊天。",
+    "steps": [
+      {
+        "kind": "tool",
+        "name": "xmi_project_create",
+        "args": {
+          "schema_version": "0.1.0",
+          "initial_idea": "居民预约共享工具",
+          "source_ref": {
+            "type": "conversation_turn",
+            "ref": "fixture:owner"
+          },
+          "idempotency_key": "intake"
+        },
+        "form": "accept",
+        "expect": {
+          "ok": true,
+          "version": 1,
+          "first_status": "PROPOSED"
+        }
+      },
+      {
+        "kind": "new_session"
+      },
+      {
+        "kind": "tool",
+        "name": "xmi_project_resume",
+        "args": {
+          "schema_version": "0.1.0",
+          "project_id": "$project_id"
+        },
+        "form": "none",
+        "expect": {
+          "ok": true,
+          "version": 1
+        }
+      },
+      {
+        "kind": "assistant",
+        "text": "已从项目存储恢复；当前内容仍是候选，不需要完整历史聊天。",
+        "questions": [
+          "工具预约成功后，借用和归还怎样衔接？"
+        ],
+        "claims": {
+          "confirmed_ids": [],
+          "selected_mode": null,
+          "saved": false,
+          "readiness": "NOT_EVALUATED",
+          "final_spec": false,
+          "confirmation_mechanism_verified": false,
+          "implementation_tasks": []
+        }
+      }
+    ]
+  },
+  {
+    "id": "risk-and-export-unavailable",
+    "invocation": "explicit",
+    "request": "$xmi-discovery 我选快速验证但想真实收费，直接给我最终规格。",
+    "steps": [
+      {
+        "kind": "tool",
+        "name": "xmi_project_create",
+        "args": {
+          "schema_version": "0.1.0",
+          "initial_idea": "居民预约共享工具",
+          "source_ref": {
+            "type": "conversation_turn",
+            "ref": "fixture:owner"
+          },
+          "idempotency_key": "intake"
+        },
+        "form": "accept",
+        "expect": {
+          "ok": true,
+          "version": 1,
+          "first_status": "PROPOSED"
+        }
+      },
+      {
+        "kind": "tool",
+        "name": "xmi_mode_risk_evaluate",
+        "args": {
+          "schema_version": "0.1.0",
+          "project_id": "$project_id",
+          "expected_version": "$version"
+        },
+        "form": "none",
+        "expect": {
+          "ok": true,
+          "version": 1
+        },
+        "note": "M5 advanced this contract: xmi_mode_risk_evaluate is implemented, so the M3 placeholder MILESTONE_DEPENDENCY_UNAVAILABLE no longer applies. See docs/evidence/M5-BASELINE.json."
+      },
+      {
+        "kind": "assistant",
+        "text": "风险评估已可用，并对真实收款给出 MODE-OVERRIDE 阻塞项与更高的最低模式要求；不能把它当作安全通过，也不能交付最终规格。",
+        "questions": [
+          "你要验证非真实收款的演示，还是坚持第一版就真实收费？"
+        ],
+        "claims": {
+          "confirmed_ids": [],
+          "selected_mode": null,
+          "saved": false,
+          "readiness": "NOT_EVALUATED",
+          "final_spec": false,
+          "confirmation_mechanism_verified": false,
+          "implementation_tasks": []
+        }
+      }
+    ]
+  }
+]

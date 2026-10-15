@@ -1,0 +1,166 @@
+{
+  "snapshot": {
+    "schema_version": "0.2.0",
+    "project_id": "XMI-C88C17E2-D946-4E04-A2A2-26079CDB4963",
+    "xspec_id": "XSPEC-C88C17E2-D946-4E04-A2A2-26079CDB4963",
+    "title": "Legacy compatibility fixture",
+    "profile": "web-micro-saas-v0",
+    "delivery_policy": {
+      "requested_mode": "FAST_VALIDATION",
+      "effective_mode": "FAST_VALIDATION",
+      "readiness_target": "PROTOTYPE_READY",
+      "selection_source": "OWNER_CONFIRMED",
+      "selected_at": "2026-10-01T00:00:00.000Z",
+      "history": [
+        {
+          "from_mode": null,
+          "to_mode": "FAST_VALIDATION",
+          "reason": "fixture",
+          "changed_by": "owner",
+          "changed_at": "2026-10-01T00:00:00.000Z"
+        }
+      ],
+      "risk_overrides": [
+        {
+          "id": "MODE-OVERRIDE-SENSITIVE-DATA-D3243D6082DC",
+          "scope_ids": [
+            "VISION-C88C17E2-D946-4E04-A2A2-26079CDB4963"
+          ],
+          "minimum_mode": "PRODUCT_GRADE",
+          "reason_code": "SENSITIVE_DATA",
+          "rationale": "Sensitive personal or regulated-domain data requires stronger specification and audit depth.",
+          "status": "CONFIRMED",
+          "resolution": "DEFER_OR_EXCLUDE",
+          "source_refs": [
+            {
+              "type": "owner_action",
+              "ref": "fixture:legacy-risk"
+            },
+            {
+              "type": "owner_action",
+              "ref": "fixture:legacy-risk"
+            },
+            {
+              "type": "owner_action",
+              "ref": "fixture:legacy-risk"
+            }
+          ]
+        }
+      ]
+    },
+    "lifecycle_state": "CLARIFICATION",
+    "model_version": 4,
+    "items": [
+      {
+        "id": "VISION-C88C17E2-D946-4E04-A2A2-26079CDB4963",
+        "type": "vision",
+        "statement": "系统健康页",
+        "status": "CONFIRMED",
+        "source_refs": [
+          {
+            "type": "owner_action",
+            "ref": "fixture:legacy-risk"
+          },
+          {
+            "type": "owner_action",
+            "ref": "fixture:legacy-risk"
+          }
+        ],
+        "version": 2,
+        "created_at": "2026-10-01T00:00:00.000Z",
+        "updated_at": "2026-10-01T00:00:00.000Z",
+        "confirmed_by": "owner",
+        "confirmed_at": "2026-10-01T00:00:00.000Z"
+      }
+    ],
+    "open_questions": [],
+    "current_xspec_version": null,
+    "created_at": "2026-10-01T00:00:00.000Z",
+    "updated_at": "2026-10-01T00:00:00.000Z"
+  },
+  "events": [
+    {
+      "event_id": "EVENT-DD34F9A2-F494-489A-BDC6-2F1C0246ED7A",
+      "project_id": "XMI-C88C17E2-D946-4E04-A2A2-26079CDB4963",
+      "version": 1,
+      "actor": "owner",
+      "occurred_at": "2026-10-01T00:00:00.000Z",
+      "command": {
+        "kind": "PROJECT_CREATED",
+        "title": "Legacy compatibility fixture",
+        "idea": "系统健康页",
+        "source_ref": {
+          "type": "owner_action",
+          "ref": "fixture:legacy-risk"
+        }
+      },
+      "previous_hash": "",
+      "hash": "e5684b5b243c48005a9fb967e9c522b0e3ce37dcd874c78e378f8e12b5b9b381"
+    },
+    {
+      "event_id": "EVENT-AAEB0067-FD74-494F-AC92-A8C70E700B0B",
+      "project_id": "XMI-C88C17E2-D946-4E04-A2A2-26079CDB4963",
+      "version": 2,
+      "actor": "owner",
+      "occurred_at": "2026-10-01T00:00:00.000Z",
+      "command": {
+        "kind": "DELIVERY_MODE_SELECTED",
+        "mode": "FAST_VALIDATION",
+        "fingerprint": "63c818575e3437b91cb35486928204557eabf4be89c6d05a13559e1573dd30ec",
+        "reason": "fixture",
+        "owner_action": {
+          "intent": "CONFIRM",
+          "source_ref": {
+            "type": "owner_action",
+            "ref": "fixture:legacy-risk"
+          }
+        }
+      },
+      "previous_hash": "e5684b5b243c48005a9fb967e9c522b0e3ce37dcd874c78e378f8e12b5b9b381",
+      "hash": "c7f9cdca2b87ad04696624bc938f7eccec70b5737803ae38a7b96c88207fe2d6"
+    },
+    {
+      "event_id": "EVENT-FA4252F1-2D7D-4C5C-BFDB-376BF667E231",
+      "project_id": "XMI-C88C17E2-D946-4E04-A2A2-26079CDB4963",
+      "version": 3,
+      "actor": "owner",
+      "occurred_at": "2026-10-01T00:00:00.000Z",
+      "command": {
+        "kind": "ITEM_CONFIRMED",
+        "item_id": "VISION-C88C17E2-D946-4E04-A2A2-26079CDB4963",
+        "fingerprint": "c32aa10d54c74b91466472c8c547e709f173245fbeec80586bc3b905b564708f",
+        "owner_action": {
+          "intent": "CONFIRM",
+          "source_ref": {
+            "type": "owner_action",
+            "ref": "fixture:legacy-risk"
+          }
+        }
+      },
+      "previous_hash": "c7f9cdca2b87ad04696624bc938f7eccec70b5737803ae38a7b96c88207fe2d6",
+      "hash": "3cb195450f2c271722b56773b1ceb0da67c714b89702e63fa59bbf46492258d5"
+    },
+    {
+      "event_id": "EVENT-A4189523-36DF-45E0-AF27-1F9F740B36D3",
+      "project_id": "XMI-C88C17E2-D946-4E04-A2A2-26079CDB4963",
+      "version": 4,
+      "actor": "owner",
+      "occurred_at": "2026-10-01T00:00:00.000Z",
+      "command": {
+        "kind": "MODE_OVERRIDE_RESOLVED",
+        "override_id": "MODE-OVERRIDE-SENSITIVE-DATA-D3243D6082DC",
+        "resolution": "DEFER_OR_EXCLUDE",
+        "rationale": "Owner historical explanation preserved only in original event.",
+        "owner_action": {
+          "intent": "RESOLVE_OVERRIDE",
+          "source_ref": {
+            "type": "owner_action",
+            "ref": "fixture:legacy-risk"
+          }
+        }
+      },
+      "previous_hash": "3cb195450f2c271722b56773b1ceb0da67c714b89702e63fa59bbf46492258d5",
+      "hash": "5f53a89ee0a2df34f65821ae35229506123f4faac6ce02df47c09468a1055a45"
+    }
+  ]
+}

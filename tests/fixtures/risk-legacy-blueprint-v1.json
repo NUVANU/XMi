@@ -1,0 +1,1327 @@
+{
+  "snapshot": {
+    "schema_version": "0.2.0",
+    "project_id": "XMI-479777F1-28D5-46D8-9F02-8E460FA84481",
+    "xspec_id": "XSPEC-479777F1-28D5-46D8-9F02-8E460FA84481",
+    "title": "Legacy blueprint fixture",
+    "profile": "web-micro-saas-v0",
+    "delivery_policy": {
+      "requested_mode": "FAST_DEVELOPMENT",
+      "effective_mode": "FAST_DEVELOPMENT",
+      "readiness_target": "BUILD_READY",
+      "selection_source": "OWNER_CONFIRMED",
+      "selected_at": "2026-10-01T00:00:00.000Z",
+      "history": [
+        {
+          "from_mode": null,
+          "to_mode": "FAST_DEVELOPMENT",
+          "reason": "fixture",
+          "changed_by": "owner",
+          "changed_at": "2026-10-01T00:00:00.000Z"
+        }
+      ],
+      "risk_overrides": [
+        {
+          "id": "MODE-OVERRIDE-PAYMENT-OR-FINANCIAL-7F634648C169",
+          "scope_ids": [
+            "REQ-PAY-L"
+          ],
+          "minimum_mode": "PRODUCT_GRADE",
+          "reason_code": "PAYMENT_OR_FINANCIAL",
+          "rationale": "Payment, billing, refunds or financial records are high-risk scope and cannot stay at prototype depth by convenience.",
+          "status": "CONFIRMED",
+          "resolution": "STUB_OR_SANDBOX",
+          "source_refs": [
+            {
+              "type": "owner_action",
+              "ref": "fixture:legacy-blueprint-risk"
+            },
+            {
+              "type": "owner_action",
+              "ref": "fixture:legacy-blueprint-risk"
+            },
+            {
+              "type": "owner_action",
+              "ref": "fixture:legacy-blueprint-risk"
+            }
+          ]
+        }
+      ]
+    },
+    "lifecycle_state": "SOLUTION_REVIEW",
+    "model_version": 25,
+    "items": [
+      {
+        "id": "VISION-479777F1-28D5-46D8-9F02-8E460FA84481",
+        "type": "vision",
+        "statement": "Record orders for shop owners.",
+        "status": "PROPOSED",
+        "source_refs": [
+          {
+            "type": "owner_action",
+            "ref": "fixture:legacy-blueprint-risk"
+          }
+        ],
+        "version": 1,
+        "created_at": "2026-10-01T00:00:00.000Z",
+        "updated_at": "2026-10-01T00:00:00.000Z"
+      },
+      {
+        "id": "VISION-L",
+        "type": "vision",
+        "statement": "Help independent shop owners record orders",
+        "status": "CONFIRMED",
+        "source_refs": [
+          {
+            "type": "owner_action",
+            "ref": "fixture:legacy-blueprint-risk"
+          },
+          {
+            "type": "owner_action",
+            "ref": "fixture:legacy-blueprint-risk"
+          }
+        ],
+        "tags": [
+          "problem",
+          "outcome"
+        ],
+        "version": 2,
+        "created_at": "2026-10-01T00:00:00.000Z",
+        "updated_at": "2026-10-01T00:00:00.000Z",
+        "confirmed_by": "owner",
+        "confirmed_at": "2026-10-01T00:00:00.000Z"
+      },
+      {
+        "id": "ACTOR-L",
+        "type": "actor",
+        "statement": "Shop owners",
+        "status": "CONFIRMED",
+        "source_refs": [
+          {
+            "type": "owner_action",
+            "ref": "fixture:legacy-blueprint-risk"
+          },
+          {
+            "type": "owner_action",
+            "ref": "fixture:legacy-blueprint-risk"
+          }
+        ],
+        "tags": [
+          "primary-user"
+        ],
+        "version": 2,
+        "created_at": "2026-10-01T00:00:00.000Z",
+        "updated_at": "2026-10-01T00:00:00.000Z",
+        "confirmed_by": "owner",
+        "confirmed_at": "2026-10-01T00:00:00.000Z"
+      },
+      {
+        "id": "FLOW-L",
+        "type": "flow",
+        "statement": "Shop owner saves and views an order",
+        "status": "CONFIRMED",
+        "source_refs": [
+          {
+            "type": "owner_action",
+            "ref": "fixture:legacy-blueprint-risk"
+          },
+          {
+            "type": "owner_action",
+            "ref": "fixture:legacy-blueprint-risk"
+          }
+        ],
+        "tags": [
+          "core"
+        ],
+        "version": 2,
+        "created_at": "2026-10-01T00:00:00.000Z",
+        "updated_at": "2026-10-01T00:00:00.000Z",
+        "confirmed_by": "owner",
+        "confirmed_at": "2026-10-01T00:00:00.000Z"
+      },
+      {
+        "id": "DATA-L",
+        "type": "data_entity",
+        "statement": "Orders stay in an owning workspace",
+        "status": "CONFIRMED",
+        "source_refs": [
+          {
+            "type": "owner_action",
+            "ref": "fixture:legacy-blueprint-risk"
+          },
+          {
+            "type": "owner_action",
+            "ref": "fixture:legacy-blueprint-risk"
+          }
+        ],
+        "tags": [
+          "data-sensitivity"
+        ],
+        "version": 2,
+        "created_at": "2026-10-01T00:00:00.000Z",
+        "updated_at": "2026-10-01T00:00:00.000Z",
+        "confirmed_by": "owner",
+        "confirmed_at": "2026-10-01T00:00:00.000Z"
+      },
+      {
+        "id": "DEPLOY-L",
+        "type": "solution_constraint",
+        "statement": "Use a cloud web application",
+        "status": "CONFIRMED",
+        "source_refs": [
+          {
+            "type": "owner_action",
+            "ref": "fixture:legacy-blueprint-risk"
+          },
+          {
+            "type": "owner_action",
+            "ref": "fixture:legacy-blueprint-risk"
+          }
+        ],
+        "tags": [
+          "deployment",
+          "local-cloud"
+        ],
+        "version": 2,
+        "created_at": "2026-10-01T00:00:00.000Z",
+        "updated_at": "2026-10-01T00:00:00.000Z",
+        "confirmed_by": "owner",
+        "confirmed_at": "2026-10-01T00:00:00.000Z"
+      },
+      {
+        "id": "SCALE-L",
+        "type": "non_functional_requirement",
+        "statement": "Pilot scale 100 users with sub-second latency",
+        "status": "CONFIRMED",
+        "source_refs": [
+          {
+            "type": "owner_action",
+            "ref": "fixture:legacy-blueprint-risk"
+          },
+          {
+            "type": "owner_action",
+            "ref": "fixture:legacy-blueprint-risk"
+          }
+        ],
+        "tags": [
+          "scale",
+          "latency"
+        ],
+        "version": 2,
+        "created_at": "2026-10-01T00:00:00.000Z",
+        "updated_at": "2026-10-01T00:00:00.000Z",
+        "confirmed_by": "owner",
+        "confirmed_at": "2026-10-01T00:00:00.000Z"
+      },
+      {
+        "id": "NOINT-L",
+        "type": "exclusion",
+        "statement": "No external integrations",
+        "status": "CONFIRMED",
+        "source_refs": [
+          {
+            "type": "owner_action",
+            "ref": "fixture:legacy-blueprint-risk"
+          },
+          {
+            "type": "owner_action",
+            "ref": "fixture:legacy-blueprint-risk"
+          }
+        ],
+        "tags": [
+          "integrations-none"
+        ],
+        "version": 2,
+        "created_at": "2026-10-01T00:00:00.000Z",
+        "updated_at": "2026-10-01T00:00:00.000Z",
+        "confirmed_by": "owner",
+        "confirmed_at": "2026-10-01T00:00:00.000Z"
+      },
+      {
+        "id": "COST-L",
+        "type": "constraint",
+        "statement": "Prefer low operating cost and maintenance",
+        "status": "CONFIRMED",
+        "source_refs": [
+          {
+            "type": "owner_action",
+            "ref": "fixture:legacy-blueprint-risk"
+          },
+          {
+            "type": "owner_action",
+            "ref": "fixture:legacy-blueprint-risk"
+          }
+        ],
+        "tags": [
+          "cost",
+          "maintenance"
+        ],
+        "version": 2,
+        "created_at": "2026-10-01T00:00:00.000Z",
+        "updated_at": "2026-10-01T00:00:00.000Z",
+        "confirmed_by": "owner",
+        "confirmed_at": "2026-10-01T00:00:00.000Z"
+      },
+      {
+        "id": "PLATFORM-L",
+        "type": "constraint",
+        "statement": "Support desktop and mobile web browsers",
+        "status": "CONFIRMED",
+        "source_refs": [
+          {
+            "type": "owner_action",
+            "ref": "fixture:legacy-blueprint-risk"
+          },
+          {
+            "type": "owner_action",
+            "ref": "fixture:legacy-blueprint-risk"
+          }
+        ],
+        "tags": [
+          "platform",
+          "browser"
+        ],
+        "version": 2,
+        "created_at": "2026-10-01T00:00:00.000Z",
+        "updated_at": "2026-10-01T00:00:00.000Z",
+        "confirmed_by": "owner",
+        "confirmed_at": "2026-10-01T00:00:00.000Z"
+      },
+      {
+        "id": "REQ-PAY-L",
+        "type": "functional_requirement",
+        "statement": "Payment processing",
+        "status": "CONFIRMED",
+        "source_refs": [
+          {
+            "type": "owner_action",
+            "ref": "fixture:legacy-blueprint-risk"
+          },
+          {
+            "type": "owner_action",
+            "ref": "fixture:legacy-blueprint-risk"
+          }
+        ],
+        "tags": [],
+        "version": 2,
+        "created_at": "2026-10-01T00:00:00.000Z",
+        "updated_at": "2026-10-01T00:00:00.000Z",
+        "confirmed_by": "owner",
+        "confirmed_at": "2026-10-01T00:00:00.000Z"
+      },
+      {
+        "id": "BLUEPRINT-D050405A75E9",
+        "type": "solution_blueprint",
+        "statement": "Technical Solution Blueprint proposal for Legacy blueprint fixture",
+        "status": "CONFIRMED",
+        "source_refs": [
+          {
+            "type": "system_rule",
+            "ref": "fixture:legacy-blueprint"
+          },
+          {
+            "type": "system_rule",
+            "ref": "xmi:m13-solution-catalog:2026-10-01"
+          },
+          {
+            "type": "owner_action",
+            "ref": "fixture:legacy-blueprint-risk"
+          }
+        ],
+        "priority": "P0",
+        "links": [
+          "ACTOR-L",
+          "FLOW-L",
+          "DATA-L",
+          "DEPLOY-L",
+          "SCALE-L",
+          "COST-L",
+          "NOINT-L",
+          "PLATFORM-L"
+        ],
+        "tags": [
+          "m6",
+          "solution-blueprint",
+          "fast_development"
+        ],
+        "blueprint_detail": {
+          "blueprint_id": "BLUEPRINT-D050405A75E9",
+          "mode": "FAST_DEVELOPMENT",
+          "feasibility_inputs": [
+            {
+              "key": "TARGET_USERS",
+              "evidence_ids": [
+                "ACTOR-L"
+              ]
+            },
+            {
+              "key": "CORE_FLOW",
+              "evidence_ids": [
+                "FLOW-L"
+              ]
+            },
+            {
+              "key": "DATA_SENSITIVITY",
+              "evidence_ids": [
+                "DATA-L"
+              ]
+            },
+            {
+              "key": "LOCAL_CLOUD_REQUIREMENT",
+              "evidence_ids": [
+                "DEPLOY-L"
+              ]
+            },
+            {
+              "key": "SCALE_LATENCY_NEEDS",
+              "evidence_ids": [
+                "SCALE-L"
+              ]
+            },
+            {
+              "key": "INTEGRATION_CONSTRAINTS",
+              "evidence_ids": [
+                "COST-L",
+                "NOINT-L"
+              ]
+            },
+            {
+              "key": "COST_MAINTENANCE_PREFERENCE",
+              "evidence_ids": [
+                "COST-L"
+              ]
+            },
+            {
+              "key": "TARGET_PLATFORM",
+              "evidence_ids": [
+                "DEPLOY-L",
+                "PLATFORM-L"
+              ]
+            }
+          ],
+          "feasibility_fingerprint": "24050887ee85b2fd4d660eb91b83dfeb5cf55df3cb0a8816c56d09c8cc5b22c8",
+          "deployment_topology": "Web client plus a bounded application/backend boundary; deployment provider remains an implementation choice unless explicitly confirmed.",
+          "client_form_factor": "Use a cloud web application",
+          "backend_need": "Backend boundary is required for confirmed identity, private-data or integration behavior; keep it narrow and policy-enforcing.",
+          "persistence_data_ownership": "Help independent shop owners record orders problem outcome",
+          "authentication_authorization": "No account/authentication system is added unless the confirmed Product Model requires it.",
+          "integration_boundaries": "Keep every confirmed external provider behind an explicit failure/fallback and data-sharing boundary.",
+          "ai_capability_boundary": "No product AI capability is confirmed; do not add an AI provider/model dependency silently.",
+          "reliability_privacy_constraints": "Reliability/privacy implementation must preserve confirmed risk and data-sensitivity boundaries; unconfirmed production assurances remain gaps.",
+          "recommended_stack_profile": "前端：React + TypeScript；后端：Node.js + TypeScript API；数据：需要服务端关系数据时考虑 PostgreSQL；部署：网页客户端与应用服务，供应商待确认。 Deployable General product MVP profile: explicit web client, bounded backend/data ownership, isolation boundary and integration-failure behavior.",
+          "alternatives_tradeoffs": "React + Node.js 系统方案: 前端：React + TypeScript；后端：Node.js + TypeScript API；数据：需要服务端关系数据时考虑 PostgreSQL；部署：网页客户端与应用服务，供应商待确认。 前后端语言一致；需承担服务端运行、鉴权、备份与数据库维护。\nReact + Python 系统方案: 前端：React + TypeScript；后端：Python + FastAPI；数据：需要服务端关系数据时考虑 PostgreSQL；部署：网页客户端与 Python 应用服务。 适合比较 Python 数据处理或已有 Python 技术条件；需维护两种语言环境。\n浏览器本地工具方案: 前端：TypeScript 浏览器界面；后端：没有已确认需求则不引入；数据：需要本地保存时考虑 IndexedDB；部署：静态网页，无默认云存储。 减少服务端运维；多用户共享、跨设备同步与本地数据恢复需要额外方案。",
+          "xdev_must_preserve": [
+            "Use a cloud web application",
+            "Pilot scale 100 users with sub-second latency",
+            "No external integrations",
+            "Prefer low operating cost and maintenance",
+            "Support desktop and mobile web browsers",
+            "XDev may refine module architecture and implementation details but must return an amendment request before replacing an approved material solution constraint."
+          ],
+          "decisions_delegated_to_xdev": [
+            "Module boundaries and internal decomposition within the approved stack profile.",
+            "Library/package and internal API choices that do not change recurring cost, privacy exposure, lock-in, product behavior, offline capability, legal risk or maintenance commitment."
+          ],
+          "options": [
+            {
+              "id": "SOLUTION-OPTION-WEB-TYPESCRIPT",
+              "label": "React + Node.js 系统方案",
+              "summary": "前端：React + TypeScript；后端：Node.js + TypeScript API；数据：需要服务端关系数据时考虑 PostgreSQL；部署：网页客户端与应用服务，供应商待确认。",
+              "evaluation": {
+                "fit_to_confirmed_requirements": "MEDIUM",
+                "implementation_complexity": "MEDIUM",
+                "operational_complexity": "MEDIUM",
+                "expected_cost": "MEDIUM",
+                "privacy_security": "MEDIUM",
+                "vendor_lock_in": "MEDIUM",
+                "offline_local_requirements": "MEDIUM",
+                "xdev_support_maturity": "MEDIUM",
+                "owner_maintenance_ability": "MEDIUM",
+                "migration_path": "保留已确认的产品行为与数据边界；更换材料性技术约束前由 Owner 批准。"
+              },
+              "trade_offs": [
+                "前后端语言一致；需承担服务端运行、鉴权、备份与数据库维护。"
+              ],
+              "risks": [
+                "版本、平台兼容、授权、费用和性能须在正式选型及开发前查证；当前比较是可撤回的方案建议，未验证 XDev 对该技术的支持。"
+              ]
+            },
+            {
+              "id": "SOLUTION-OPTION-WEB-PYTHON",
+              "label": "React + Python 系统方案",
+              "summary": "前端：React + TypeScript；后端：Python + FastAPI；数据：需要服务端关系数据时考虑 PostgreSQL；部署：网页客户端与 Python 应用服务。",
+              "evaluation": {
+                "fit_to_confirmed_requirements": "MEDIUM",
+                "implementation_complexity": "MEDIUM",
+                "operational_complexity": "MEDIUM",
+                "expected_cost": "MEDIUM",
+                "privacy_security": "MEDIUM",
+                "vendor_lock_in": "MEDIUM",
+                "offline_local_requirements": "MEDIUM",
+                "xdev_support_maturity": "MEDIUM",
+                "owner_maintenance_ability": "MEDIUM",
+                "migration_path": "保留已确认的产品行为与数据边界；更换材料性技术约束前由 Owner 批准。"
+              },
+              "trade_offs": [
+                "适合比较 Python 数据处理或已有 Python 技术条件；需维护两种语言环境。"
+              ],
+              "risks": [
+                "版本、平台兼容、授权、费用和性能须在正式选型及开发前查证；当前比较是可撤回的方案建议，未验证 XDev 对该技术的支持。"
+              ]
+            },
+            {
+              "id": "SOLUTION-OPTION-LOCAL-FIRST",
+              "label": "浏览器本地工具方案",
+              "summary": "前端：TypeScript 浏览器界面；后端：没有已确认需求则不引入；数据：需要本地保存时考虑 IndexedDB；部署：静态网页，无默认云存储。",
+              "evaluation": {
+                "fit_to_confirmed_requirements": "MEDIUM",
+                "implementation_complexity": "MEDIUM",
+                "operational_complexity": "MEDIUM",
+                "expected_cost": "MEDIUM",
+                "privacy_security": "MEDIUM",
+                "vendor_lock_in": "MEDIUM",
+                "offline_local_requirements": "MEDIUM",
+                "xdev_support_maturity": "MEDIUM",
+                "owner_maintenance_ability": "MEDIUM",
+                "migration_path": "保留已确认的产品行为与数据边界；更换材料性技术约束前由 Owner 批准。"
+              },
+              "trade_offs": [
+                "减少服务端运维；多用户共享、跨设备同步与本地数据恢复需要额外方案。"
+              ],
+              "risks": [
+                "版本、平台兼容、授权、费用和性能须在正式选型及开发前查证；当前比较是可撤回的方案建议，未验证 XDev 对该技术的支持。"
+              ]
+            }
+          ],
+          "recommendation": {
+            "option_id": "SOLUTION-OPTION-WEB-TYPESCRIPT",
+            "why_it_fits": "根据已确认的平台与部署约束，建议先比较此方案；这是候选推荐，不代表已经验证性能、成本或开发支持。参考需求：DEPLOY-L, SCALE-L, NOINT-L, COST-L, PLATFORM-L。",
+            "trade_offs": [
+              "前后端语言一致；需承担服务端运行、鉴权、备份与数据库维护。"
+            ],
+            "risks": [
+              "版本、平台兼容、授权、费用和性能须在正式选型及开发前查证；当前比较是可撤回的方案建议，未验证 XDev 对该技术的支持。"
+            ],
+            "owner_decision_required": true,
+            "confidence": "LOW",
+            "unresolved_inputs": [
+              "版本、平台兼容、授权、费用和性能须在正式选型及开发前查证；当前比较是可撤回的方案建议，未验证 XDev 对该技术的支持。"
+            ]
+          },
+          "production_gaps": [
+            "FAST_DEVELOPMENT is not a production certification; full operations, recovery evidence, domain audit and immutable release evidence remain later gates."
+          ],
+          "approval_triggers": [
+            "LONG_TERM_MAINTENANCE",
+            "RECURRING_COST",
+            "THIRD_PARTY_LOCK_IN",
+            "OFFLINE_CAPABILITY"
+          ],
+          "owner_disposition": "APPROVED",
+          "delegation": null,
+          "ai_capability_profile": null,
+          "model_resolution": null
+        },
+        "version": 2,
+        "created_at": "2026-10-01T00:00:00.000Z",
+        "updated_at": "2026-10-01T00:00:00.000Z",
+        "confirmed_by": "owner",
+        "confirmed_at": "2026-10-01T00:00:00.000Z"
+      }
+    ],
+    "open_questions": [],
+    "current_xspec_version": null,
+    "created_at": "2026-10-01T00:00:00.000Z",
+    "updated_at": "2026-10-01T00:00:00.000Z"
+  },
+  "events": [
+    {
+      "event_id": "EVENT-67898F96-6D2B-416C-AE42-E3A18A0EEEB9",
+      "project_id": "XMI-479777F1-28D5-46D8-9F02-8E460FA84481",
+      "version": 1,
+      "actor": "owner",
+      "occurred_at": "2026-10-01T00:00:00.000Z",
+      "command": {
+        "kind": "PROJECT_CREATED",
+        "title": "Legacy blueprint fixture",
+        "idea": "Record orders for shop owners.",
+        "source_ref": {
+          "type": "owner_action",
+          "ref": "fixture:legacy-blueprint-risk"
+        }
+      },
+      "previous_hash": "",
+      "hash": "750fd7bde95e0168d883cacdaabcdcaa672e5e85d4a3d30327ef309145bff5df"
+    },
+    {
+      "event_id": "EVENT-036E394B-844F-4FCD-BFF2-2CDB38D92F97",
+      "project_id": "XMI-479777F1-28D5-46D8-9F02-8E460FA84481",
+      "version": 2,
+      "actor": "owner",
+      "occurred_at": "2026-10-01T00:00:00.000Z",
+      "command": {
+        "kind": "CANDIDATE_EXTRACTED",
+        "candidate": {
+          "id": "VISION-L",
+          "type": "vision",
+          "statement": "Help independent shop owners record orders",
+          "status": "PROPOSED",
+          "source_refs": [
+            {
+              "type": "owner_action",
+              "ref": "fixture:legacy-blueprint-risk"
+            }
+          ],
+          "tags": [
+            "problem",
+            "outcome"
+          ]
+        }
+      },
+      "previous_hash": "750fd7bde95e0168d883cacdaabcdcaa672e5e85d4a3d30327ef309145bff5df",
+      "hash": "566999b223ce8b57175f2910efbef24f34cdaac46ec0e66cebd10c2bc7a027ac"
+    },
+    {
+      "event_id": "EVENT-3C4B4062-2947-479E-BA65-A4402D385BCF",
+      "project_id": "XMI-479777F1-28D5-46D8-9F02-8E460FA84481",
+      "version": 3,
+      "actor": "owner",
+      "occurred_at": "2026-10-01T00:00:00.000Z",
+      "command": {
+        "kind": "ITEM_CONFIRMED",
+        "item_id": "VISION-L",
+        "fingerprint": "e6b39fd956c0615d5317754cd495cb1cf9096680f1c6870d5773783812cf8427",
+        "owner_action": {
+          "intent": "CONFIRM",
+          "source_ref": {
+            "type": "owner_action",
+            "ref": "fixture:legacy-blueprint-risk"
+          }
+        }
+      },
+      "previous_hash": "566999b223ce8b57175f2910efbef24f34cdaac46ec0e66cebd10c2bc7a027ac",
+      "hash": "06f609733010e8eb53f5dbde4c74963ceffe333746eb23bd36ee592e69285d20"
+    },
+    {
+      "event_id": "EVENT-86CC150C-4E7B-46E2-B14D-E74F9DD04E45",
+      "project_id": "XMI-479777F1-28D5-46D8-9F02-8E460FA84481",
+      "version": 4,
+      "actor": "owner",
+      "occurred_at": "2026-10-01T00:00:00.000Z",
+      "command": {
+        "kind": "CANDIDATE_EXTRACTED",
+        "candidate": {
+          "id": "ACTOR-L",
+          "type": "actor",
+          "statement": "Shop owners",
+          "status": "PROPOSED",
+          "source_refs": [
+            {
+              "type": "owner_action",
+              "ref": "fixture:legacy-blueprint-risk"
+            }
+          ],
+          "tags": [
+            "primary-user"
+          ]
+        }
+      },
+      "previous_hash": "06f609733010e8eb53f5dbde4c74963ceffe333746eb23bd36ee592e69285d20",
+      "hash": "71f097740903759a2623c9a5446479af547be84ef7bd6f92dea24f37df94c021"
+    },
+    {
+      "event_id": "EVENT-AC822692-C166-42BB-87B6-0825A4EFC00D",
+      "project_id": "XMI-479777F1-28D5-46D8-9F02-8E460FA84481",
+      "version": 5,
+      "actor": "owner",
+      "occurred_at": "2026-10-01T00:00:00.000Z",
+      "command": {
+        "kind": "ITEM_CONFIRMED",
+        "item_id": "ACTOR-L",
+        "fingerprint": "3bb0c81ab146108debc9400a833553dd83a3db82066b8f16c18d59266eda592b",
+        "owner_action": {
+          "intent": "CONFIRM",
+          "source_ref": {
+            "type": "owner_action",
+            "ref": "fixture:legacy-blueprint-risk"
+          }
+        }
+      },
+      "previous_hash": "71f097740903759a2623c9a5446479af547be84ef7bd6f92dea24f37df94c021",
+      "hash": "a4e36897e8fd9e53d42fbe27e3ef45acf02aef0cb2d3b1dfcb5dd7a6cf2f12b8"
+    },
+    {
+      "event_id": "EVENT-FF165C51-E5B6-4365-8D15-3B601417E33D",
+      "project_id": "XMI-479777F1-28D5-46D8-9F02-8E460FA84481",
+      "version": 6,
+      "actor": "owner",
+      "occurred_at": "2026-10-01T00:00:00.000Z",
+      "command": {
+        "kind": "CANDIDATE_EXTRACTED",
+        "candidate": {
+          "id": "FLOW-L",
+          "type": "flow",
+          "statement": "Shop owner saves and views an order",
+          "status": "PROPOSED",
+          "source_refs": [
+            {
+              "type": "owner_action",
+              "ref": "fixture:legacy-blueprint-risk"
+            }
+          ],
+          "tags": [
+            "core"
+          ]
+        }
+      },
+      "previous_hash": "a4e36897e8fd9e53d42fbe27e3ef45acf02aef0cb2d3b1dfcb5dd7a6cf2f12b8",
+      "hash": "332ea459501b89cfcd0a3d3d933d4c5c0dbff35b945d8a375c0d25491e79c689"
+    },
+    {
+      "event_id": "EVENT-80750A75-95E6-4A4C-9419-5CDD6F65FFEF",
+      "project_id": "XMI-479777F1-28D5-46D8-9F02-8E460FA84481",
+      "version": 7,
+      "actor": "owner",
+      "occurred_at": "2026-10-01T00:00:00.000Z",
+      "command": {
+        "kind": "ITEM_CONFIRMED",
+        "item_id": "FLOW-L",
+        "fingerprint": "540eb6ebe1e91c5e9d0d85e061479cbd0845528d7bda41b9c22749f55de2e0cb",
+        "owner_action": {
+          "intent": "CONFIRM",
+          "source_ref": {
+            "type": "owner_action",
+            "ref": "fixture:legacy-blueprint-risk"
+          }
+        }
+      },
+      "previous_hash": "332ea459501b89cfcd0a3d3d933d4c5c0dbff35b945d8a375c0d25491e79c689",
+      "hash": "cef77aad9682045bba1a2296f22c20640f06651bda0b24320de599fd2d9d2218"
+    },
+    {
+      "event_id": "EVENT-DE9BBEE7-1E57-407A-8460-FCFC6EC937FF",
+      "project_id": "XMI-479777F1-28D5-46D8-9F02-8E460FA84481",
+      "version": 8,
+      "actor": "owner",
+      "occurred_at": "2026-10-01T00:00:00.000Z",
+      "command": {
+        "kind": "CANDIDATE_EXTRACTED",
+        "candidate": {
+          "id": "DATA-L",
+          "type": "data_entity",
+          "statement": "Orders stay in an owning workspace",
+          "status": "PROPOSED",
+          "source_refs": [
+            {
+              "type": "owner_action",
+              "ref": "fixture:legacy-blueprint-risk"
+            }
+          ],
+          "tags": [
+            "data-sensitivity"
+          ]
+        }
+      },
+      "previous_hash": "cef77aad9682045bba1a2296f22c20640f06651bda0b24320de599fd2d9d2218",
+      "hash": "a4c52bf2e8e51d6b75577c27352bcb524b5bc37889ce9b102a6739da97aa9655"
+    },
+    {
+      "event_id": "EVENT-2E036A8E-06DE-46AF-8C24-CFA083379BFE",
+      "project_id": "XMI-479777F1-28D5-46D8-9F02-8E460FA84481",
+      "version": 9,
+      "actor": "owner",
+      "occurred_at": "2026-10-01T00:00:00.000Z",
+      "command": {
+        "kind": "ITEM_CONFIRMED",
+        "item_id": "DATA-L",
+        "fingerprint": "54ab25f70054ad56e9feec43649bfe7c1755d93a1f6852d454af99409175288b",
+        "owner_action": {
+          "intent": "CONFIRM",
+          "source_ref": {
+            "type": "owner_action",
+            "ref": "fixture:legacy-blueprint-risk"
+          }
+        }
+      },
+      "previous_hash": "a4c52bf2e8e51d6b75577c27352bcb524b5bc37889ce9b102a6739da97aa9655",
+      "hash": "6fcd4b999f343257d3211116a83701a38722ed1c81e7ad1a1d59a1ae08257804"
+    },
+    {
+      "event_id": "EVENT-578A258B-39CC-4579-BEB4-0684DD4F5972",
+      "project_id": "XMI-479777F1-28D5-46D8-9F02-8E460FA84481",
+      "version": 10,
+      "actor": "owner",
+      "occurred_at": "2026-10-01T00:00:00.000Z",
+      "command": {
+        "kind": "CANDIDATE_EXTRACTED",
+        "candidate": {
+          "id": "DEPLOY-L",
+          "type": "solution_constraint",
+          "statement": "Use a cloud web application",
+          "status": "PROPOSED",
+          "source_refs": [
+            {
+              "type": "owner_action",
+              "ref": "fixture:legacy-blueprint-risk"
+            }
+          ],
+          "tags": [
+            "deployment",
+            "local-cloud"
+          ]
+        }
+      },
+      "previous_hash": "6fcd4b999f343257d3211116a83701a38722ed1c81e7ad1a1d59a1ae08257804",
+      "hash": "b8c431d971a14e1148ae95283e6d6a5d4408b4172e3b207f3e4cd35cccc65686"
+    },
+    {
+      "event_id": "EVENT-BDF5E548-991D-44EC-AFED-5B0C3E8679B4",
+      "project_id": "XMI-479777F1-28D5-46D8-9F02-8E460FA84481",
+      "version": 11,
+      "actor": "owner",
+      "occurred_at": "2026-10-01T00:00:00.000Z",
+      "command": {
+        "kind": "ITEM_CONFIRMED",
+        "item_id": "DEPLOY-L",
+        "fingerprint": "22cdc44883a930dfd1a08efbba1360e944f43597e0514de36bd4185b31a42caf",
+        "owner_action": {
+          "intent": "CONFIRM",
+          "source_ref": {
+            "type": "owner_action",
+            "ref": "fixture:legacy-blueprint-risk"
+          }
+        }
+      },
+      "previous_hash": "b8c431d971a14e1148ae95283e6d6a5d4408b4172e3b207f3e4cd35cccc65686",
+      "hash": "6963b6f9f83b59e788e0c9cbaad4bb9da5128eb945e0d8c271a8fda4746ac3ff"
+    },
+    {
+      "event_id": "EVENT-084E4458-FAC9-4955-9622-6E587F34EC30",
+      "project_id": "XMI-479777F1-28D5-46D8-9F02-8E460FA84481",
+      "version": 12,
+      "actor": "owner",
+      "occurred_at": "2026-10-01T00:00:00.000Z",
+      "command": {
+        "kind": "CANDIDATE_EXTRACTED",
+        "candidate": {
+          "id": "SCALE-L",
+          "type": "non_functional_requirement",
+          "statement": "Pilot scale 100 users with sub-second latency",
+          "status": "PROPOSED",
+          "source_refs": [
+            {
+              "type": "owner_action",
+              "ref": "fixture:legacy-blueprint-risk"
+            }
+          ],
+          "tags": [
+            "scale",
+            "latency"
+          ]
+        }
+      },
+      "previous_hash": "6963b6f9f83b59e788e0c9cbaad4bb9da5128eb945e0d8c271a8fda4746ac3ff",
+      "hash": "c8ad288695e5b7f9f8818ad8d49186e745abb94b6f2a2b88444e96a67411030b"
+    },
+    {
+      "event_id": "EVENT-85047CBD-01DF-48DD-8928-8145CD1D4099",
+      "project_id": "XMI-479777F1-28D5-46D8-9F02-8E460FA84481",
+      "version": 13,
+      "actor": "owner",
+      "occurred_at": "2026-10-01T00:00:00.000Z",
+      "command": {
+        "kind": "ITEM_CONFIRMED",
+        "item_id": "SCALE-L",
+        "fingerprint": "e358164db3bfcd1a3477fab27a7baf569d027c6600c36c7515e952f39b39b20b",
+        "owner_action": {
+          "intent": "CONFIRM",
+          "source_ref": {
+            "type": "owner_action",
+            "ref": "fixture:legacy-blueprint-risk"
+          }
+        }
+      },
+      "previous_hash": "c8ad288695e5b7f9f8818ad8d49186e745abb94b6f2a2b88444e96a67411030b",
+      "hash": "048cec32a1431644f1192e90981b7efc377b6ab0535f33699a744f6208405c9b"
+    },
+    {
+      "event_id": "EVENT-81BE6EDB-FFDB-4081-BF1F-32738F4D9534",
+      "project_id": "XMI-479777F1-28D5-46D8-9F02-8E460FA84481",
+      "version": 14,
+      "actor": "owner",
+      "occurred_at": "2026-10-01T00:00:00.000Z",
+      "command": {
+        "kind": "CANDIDATE_EXTRACTED",
+        "candidate": {
+          "id": "NOINT-L",
+          "type": "exclusion",
+          "statement": "No external integrations",
+          "status": "PROPOSED",
+          "source_refs": [
+            {
+              "type": "owner_action",
+              "ref": "fixture:legacy-blueprint-risk"
+            }
+          ],
+          "tags": [
+            "integrations-none"
+          ]
+        }
+      },
+      "previous_hash": "048cec32a1431644f1192e90981b7efc377b6ab0535f33699a744f6208405c9b",
+      "hash": "85825e8ff60f9a41d37d07de8ea8ad34a39d0b30dadbc672c702402016bd604e"
+    },
+    {
+      "event_id": "EVENT-EB0F8F6F-4579-4769-85B3-9D9FDF03DDCA",
+      "project_id": "XMI-479777F1-28D5-46D8-9F02-8E460FA84481",
+      "version": 15,
+      "actor": "owner",
+      "occurred_at": "2026-10-01T00:00:00.000Z",
+      "command": {
+        "kind": "ITEM_CONFIRMED",
+        "item_id": "NOINT-L",
+        "fingerprint": "138d6c7b586296fd2f8175fe7161476bef312f0d45bbf2ff67955d8caed44f9d",
+        "owner_action": {
+          "intent": "CONFIRM",
+          "source_ref": {
+            "type": "owner_action",
+            "ref": "fixture:legacy-blueprint-risk"
+          }
+        }
+      },
+      "previous_hash": "85825e8ff60f9a41d37d07de8ea8ad34a39d0b30dadbc672c702402016bd604e",
+      "hash": "77b6e1260d676427a8e88b3dfb54198aa9eaae729b211bd99b708efa77ebcb4f"
+    },
+    {
+      "event_id": "EVENT-A8734D67-2D05-4944-A96E-0C4FC90C0F97",
+      "project_id": "XMI-479777F1-28D5-46D8-9F02-8E460FA84481",
+      "version": 16,
+      "actor": "owner",
+      "occurred_at": "2026-10-01T00:00:00.000Z",
+      "command": {
+        "kind": "CANDIDATE_EXTRACTED",
+        "candidate": {
+          "id": "COST-L",
+          "type": "constraint",
+          "statement": "Prefer low operating cost and maintenance",
+          "status": "PROPOSED",
+          "source_refs": [
+            {
+              "type": "owner_action",
+              "ref": "fixture:legacy-blueprint-risk"
+            }
+          ],
+          "tags": [
+            "cost",
+            "maintenance"
+          ]
+        }
+      },
+      "previous_hash": "77b6e1260d676427a8e88b3dfb54198aa9eaae729b211bd99b708efa77ebcb4f",
+      "hash": "d86ffdfcf3af9eb6fe545fade97c87a1b0283437607ce20c2dad6a1164896815"
+    },
+    {
+      "event_id": "EVENT-E5536AFD-1635-41A1-A244-2FB0276C9109",
+      "project_id": "XMI-479777F1-28D5-46D8-9F02-8E460FA84481",
+      "version": 17,
+      "actor": "owner",
+      "occurred_at": "2026-10-01T00:00:00.000Z",
+      "command": {
+        "kind": "ITEM_CONFIRMED",
+        "item_id": "COST-L",
+        "fingerprint": "c073ad3c266b5b6cd72f7dca3e6e14b2579ccfeec532f9a690aac85507f20a7c",
+        "owner_action": {
+          "intent": "CONFIRM",
+          "source_ref": {
+            "type": "owner_action",
+            "ref": "fixture:legacy-blueprint-risk"
+          }
+        }
+      },
+      "previous_hash": "d86ffdfcf3af9eb6fe545fade97c87a1b0283437607ce20c2dad6a1164896815",
+      "hash": "81af0eb255f575c3cc7178198793dfd35801ee17997e0cc786d6062cbde0f233"
+    },
+    {
+      "event_id": "EVENT-52ACD79A-8D69-4DC3-AC37-1275F60A97D0",
+      "project_id": "XMI-479777F1-28D5-46D8-9F02-8E460FA84481",
+      "version": 18,
+      "actor": "owner",
+      "occurred_at": "2026-10-01T00:00:00.000Z",
+      "command": {
+        "kind": "CANDIDATE_EXTRACTED",
+        "candidate": {
+          "id": "PLATFORM-L",
+          "type": "constraint",
+          "statement": "Support desktop and mobile web browsers",
+          "status": "PROPOSED",
+          "source_refs": [
+            {
+              "type": "owner_action",
+              "ref": "fixture:legacy-blueprint-risk"
+            }
+          ],
+          "tags": [
+            "platform",
+            "browser"
+          ]
+        }
+      },
+      "previous_hash": "81af0eb255f575c3cc7178198793dfd35801ee17997e0cc786d6062cbde0f233",
+      "hash": "c7dd0e42251049150fa6bd4794c8792502fe12cdcc60abdfb13d0c410a853ec0"
+    },
+    {
+      "event_id": "EVENT-F9F8E30D-7EF6-410C-86AA-C792EB5D1C74",
+      "project_id": "XMI-479777F1-28D5-46D8-9F02-8E460FA84481",
+      "version": 19,
+      "actor": "owner",
+      "occurred_at": "2026-10-01T00:00:00.000Z",
+      "command": {
+        "kind": "ITEM_CONFIRMED",
+        "item_id": "PLATFORM-L",
+        "fingerprint": "60ec32a58f34b55ba7202de60c6b986ab0f67cda9aed6e934238075c4dd4ee4d",
+        "owner_action": {
+          "intent": "CONFIRM",
+          "source_ref": {
+            "type": "owner_action",
+            "ref": "fixture:legacy-blueprint-risk"
+          }
+        }
+      },
+      "previous_hash": "c7dd0e42251049150fa6bd4794c8792502fe12cdcc60abdfb13d0c410a853ec0",
+      "hash": "74676b725b1ab239a8fd22e0c8f6cc199b26f2b3fe82ab30cfe4f0433490f617"
+    },
+    {
+      "event_id": "EVENT-21451B60-30D8-45A2-AF42-E0CDA9C89FFA",
+      "project_id": "XMI-479777F1-28D5-46D8-9F02-8E460FA84481",
+      "version": 20,
+      "actor": "owner",
+      "occurred_at": "2026-10-01T00:00:00.000Z",
+      "command": {
+        "kind": "CANDIDATE_EXTRACTED",
+        "candidate": {
+          "id": "REQ-PAY-L",
+          "type": "functional_requirement",
+          "statement": "Payment processing",
+          "status": "PROPOSED",
+          "source_refs": [
+            {
+              "type": "owner_action",
+              "ref": "fixture:legacy-blueprint-risk"
+            }
+          ],
+          "tags": []
+        }
+      },
+      "previous_hash": "74676b725b1ab239a8fd22e0c8f6cc199b26f2b3fe82ab30cfe4f0433490f617",
+      "hash": "9c4a99e2c35b6eecae2ce82a2c77201a8333c206141e636d415524207f032ebc"
+    },
+    {
+      "event_id": "EVENT-D614F75D-AE32-4338-B7FF-DD8D2B42A3DB",
+      "project_id": "XMI-479777F1-28D5-46D8-9F02-8E460FA84481",
+      "version": 21,
+      "actor": "owner",
+      "occurred_at": "2026-10-01T00:00:00.000Z",
+      "command": {
+        "kind": "ITEM_CONFIRMED",
+        "item_id": "REQ-PAY-L",
+        "fingerprint": "db0cbf55a61a6c1f391f7c47175a93b10851ec0b6e763e082ad1814897394999",
+        "owner_action": {
+          "intent": "CONFIRM",
+          "source_ref": {
+            "type": "owner_action",
+            "ref": "fixture:legacy-blueprint-risk"
+          }
+        }
+      },
+      "previous_hash": "9c4a99e2c35b6eecae2ce82a2c77201a8333c206141e636d415524207f032ebc",
+      "hash": "911c3bb72b05a75f9c3993d17ee5bb6ccc09a620e272c3c5425e75960f5c5d01"
+    },
+    {
+      "event_id": "EVENT-207B52EA-632C-43A4-A3FF-74BD0A5809E9",
+      "project_id": "XMI-479777F1-28D5-46D8-9F02-8E460FA84481",
+      "version": 22,
+      "actor": "owner",
+      "occurred_at": "2026-10-01T00:00:00.000Z",
+      "command": {
+        "kind": "DELIVERY_MODE_SELECTED",
+        "mode": "FAST_DEVELOPMENT",
+        "fingerprint": "31e2c7d7cb90c09eeee6f313789758b472997c578101ae6568797cff91c03207",
+        "reason": "fixture",
+        "owner_action": {
+          "intent": "CONFIRM",
+          "source_ref": {
+            "type": "owner_action",
+            "ref": "fixture:legacy-blueprint-risk"
+          }
+        }
+      },
+      "previous_hash": "911c3bb72b05a75f9c3993d17ee5bb6ccc09a620e272c3c5425e75960f5c5d01",
+      "hash": "27eefb0b8fe60f3f6d25b06b34e7a84698af522cde2f38343df6b043e4cda9dc"
+    },
+    {
+      "event_id": "EVENT-E8B25DC2-DF2C-429A-8F46-D23D358714B8",
+      "project_id": "XMI-479777F1-28D5-46D8-9F02-8E460FA84481",
+      "version": 23,
+      "actor": "owner",
+      "occurred_at": "2026-10-01T00:00:00.000Z",
+      "command": {
+        "kind": "MODE_OVERRIDE_RESOLVED",
+        "override_id": "MODE-OVERRIDE-PAYMENT-OR-FINANCIAL-7F634648C169",
+        "resolution": "STUB_OR_SANDBOX",
+        "rationale": "Owner approved sandbox only.",
+        "owner_action": {
+          "intent": "RESOLVE_OVERRIDE",
+          "source_ref": {
+            "type": "owner_action",
+            "ref": "fixture:legacy-blueprint-risk"
+          }
+        }
+      },
+      "previous_hash": "27eefb0b8fe60f3f6d25b06b34e7a84698af522cde2f38343df6b043e4cda9dc",
+      "hash": "d2b9b94bcb37b3edac8d252b5fa850395b5273ffd0ce24395b4c1a842c3e7d40"
+    },
+    {
+      "event_id": "EVENT-7E236899-7B27-43FE-9702-58A0B387117B",
+      "project_id": "XMI-479777F1-28D5-46D8-9F02-8E460FA84481",
+      "version": 24,
+      "actor": "owner",
+      "occurred_at": "2026-10-01T00:00:00.000Z",
+      "command": {
+        "kind": "CANDIDATE_EXTRACTED",
+        "candidate": {
+          "id": "BLUEPRINT-D050405A75E9",
+          "type": "solution_blueprint",
+          "statement": "Technical Solution Blueprint proposal for Legacy blueprint fixture",
+          "status": "PROPOSED",
+          "source_refs": [
+            {
+              "type": "system_rule",
+              "ref": "fixture:legacy-blueprint"
+            },
+            {
+              "type": "system_rule",
+              "ref": "xmi:m13-solution-catalog:2026-10-01"
+            }
+          ],
+          "priority": "P0",
+          "links": [
+            "ACTOR-L",
+            "FLOW-L",
+            "DATA-L",
+            "DEPLOY-L",
+            "SCALE-L",
+            "COST-L",
+            "NOINT-L",
+            "PLATFORM-L"
+          ],
+          "tags": [
+            "m6",
+            "solution-blueprint",
+            "fast_development"
+          ],
+          "blueprint_detail": {
+            "blueprint_id": "BLUEPRINT-D050405A75E9",
+            "mode": "FAST_DEVELOPMENT",
+            "feasibility_inputs": [
+              {
+                "key": "TARGET_USERS",
+                "evidence_ids": [
+                  "ACTOR-L"
+                ]
+              },
+              {
+                "key": "CORE_FLOW",
+                "evidence_ids": [
+                  "FLOW-L"
+                ]
+              },
+              {
+                "key": "DATA_SENSITIVITY",
+                "evidence_ids": [
+                  "DATA-L"
+                ]
+              },
+              {
+                "key": "LOCAL_CLOUD_REQUIREMENT",
+                "evidence_ids": [
+                  "DEPLOY-L"
+                ]
+              },
+              {
+                "key": "SCALE_LATENCY_NEEDS",
+                "evidence_ids": [
+                  "SCALE-L"
+                ]
+              },
+              {
+                "key": "INTEGRATION_CONSTRAINTS",
+                "evidence_ids": [
+                  "COST-L",
+                  "NOINT-L"
+                ]
+              },
+              {
+                "key": "COST_MAINTENANCE_PREFERENCE",
+                "evidence_ids": [
+                  "COST-L"
+                ]
+              },
+              {
+                "key": "TARGET_PLATFORM",
+                "evidence_ids": [
+                  "DEPLOY-L",
+                  "PLATFORM-L"
+                ]
+              }
+            ],
+            "feasibility_fingerprint": "24050887ee85b2fd4d660eb91b83dfeb5cf55df3cb0a8816c56d09c8cc5b22c8",
+            "deployment_topology": "Web client plus a bounded application/backend boundary; deployment provider remains an implementation choice unless explicitly confirmed.",
+            "client_form_factor": "Use a cloud web application",
+            "backend_need": "Backend boundary is required for confirmed identity, private-data or integration behavior; keep it narrow and policy-enforcing.",
+            "persistence_data_ownership": "Help independent shop owners record orders problem outcome",
+            "authentication_authorization": "No account/authentication system is added unless the confirmed Product Model requires it.",
+            "integration_boundaries": "Keep every confirmed external provider behind an explicit failure/fallback and data-sharing boundary.",
+            "ai_capability_boundary": "No product AI capability is confirmed; do not add an AI provider/model dependency silently.",
+            "reliability_privacy_constraints": "Reliability/privacy implementation must preserve confirmed risk and data-sensitivity boundaries; unconfirmed production assurances remain gaps.",
+            "recommended_stack_profile": "前端：React + TypeScript；后端：Node.js + TypeScript API；数据：需要服务端关系数据时考虑 PostgreSQL；部署：网页客户端与应用服务，供应商待确认。 Deployable General product MVP profile: explicit web client, bounded backend/data ownership, isolation boundary and integration-failure behavior.",
+            "alternatives_tradeoffs": "React + Node.js 系统方案: 前端：React + TypeScript；后端：Node.js + TypeScript API；数据：需要服务端关系数据时考虑 PostgreSQL；部署：网页客户端与应用服务，供应商待确认。 前后端语言一致；需承担服务端运行、鉴权、备份与数据库维护。\nReact + Python 系统方案: 前端：React + TypeScript；后端：Python + FastAPI；数据：需要服务端关系数据时考虑 PostgreSQL；部署：网页客户端与 Python 应用服务。 适合比较 Python 数据处理或已有 Python 技术条件；需维护两种语言环境。\n浏览器本地工具方案: 前端：TypeScript 浏览器界面；后端：没有已确认需求则不引入；数据：需要本地保存时考虑 IndexedDB；部署：静态网页，无默认云存储。 减少服务端运维；多用户共享、跨设备同步与本地数据恢复需要额外方案。",
+            "xdev_must_preserve": [
+              "Use a cloud web application",
+              "Pilot scale 100 users with sub-second latency",
+              "No external integrations",
+              "Prefer low operating cost and maintenance",
+              "Support desktop and mobile web browsers",
+              "XDev may refine module architecture and implementation details but must return an amendment request before replacing an approved material solution constraint."
+            ],
+            "decisions_delegated_to_xdev": [
+              "Module boundaries and internal decomposition within the approved stack profile.",
+              "Library/package and internal API choices that do not change recurring cost, privacy exposure, lock-in, product behavior, offline capability, legal risk or maintenance commitment."
+            ],
+            "options": [
+              {
+                "id": "SOLUTION-OPTION-WEB-TYPESCRIPT",
+                "label": "React + Node.js 系统方案",
+                "summary": "前端：React + TypeScript；后端：Node.js + TypeScript API；数据：需要服务端关系数据时考虑 PostgreSQL；部署：网页客户端与应用服务，供应商待确认。",
+                "evaluation": {
+                  "fit_to_confirmed_requirements": "MEDIUM",
+                  "implementation_complexity": "MEDIUM",
+                  "operational_complexity": "MEDIUM",
+                  "expected_cost": "MEDIUM",
+                  "privacy_security": "MEDIUM",
+                  "vendor_lock_in": "MEDIUM",
+                  "offline_local_requirements": "MEDIUM",
+                  "xdev_support_maturity": "MEDIUM",
+                  "owner_maintenance_ability": "MEDIUM",
+                  "migration_path": "保留已确认的产品行为与数据边界；更换材料性技术约束前由 Owner 批准。"
+                },
+                "trade_offs": [
+                  "前后端语言一致；需承担服务端运行、鉴权、备份与数据库维护。"
+                ],
+                "risks": [
+                  "版本、平台兼容、授权、费用和性能须在正式选型及开发前查证；当前比较是可撤回的方案建议，未验证 XDev 对该技术的支持。"
+                ]
+              },
+              {
+                "id": "SOLUTION-OPTION-WEB-PYTHON",
+                "label": "React + Python 系统方案",
+                "summary": "前端：React + TypeScript；后端：Python + FastAPI；数据：需要服务端关系数据时考虑 PostgreSQL；部署：网页客户端与 Python 应用服务。",
+                "evaluation": {
+                  "fit_to_confirmed_requirements": "MEDIUM",
+                  "implementation_complexity": "MEDIUM",
+                  "operational_complexity": "MEDIUM",
+                  "expected_cost": "MEDIUM",
+                  "privacy_security": "MEDIUM",
+                  "vendor_lock_in": "MEDIUM",
+                  "offline_local_requirements": "MEDIUM",
+                  "xdev_support_maturity": "MEDIUM",
+                  "owner_maintenance_ability": "MEDIUM",
+                  "migration_path": "保留已确认的产品行为与数据边界；更换材料性技术约束前由 Owner 批准。"
+                },
+                "trade_offs": [
+                  "适合比较 Python 数据处理或已有 Python 技术条件；需维护两种语言环境。"
+                ],
+                "risks": [
+                  "版本、平台兼容、授权、费用和性能须在正式选型及开发前查证；当前比较是可撤回的方案建议，未验证 XDev 对该技术的支持。"
+                ]
+              },
+              {
+                "id": "SOLUTION-OPTION-LOCAL-FIRST",
+                "label": "浏览器本地工具方案",
+                "summary": "前端：TypeScript 浏览器界面；后端：没有已确认需求则不引入；数据：需要本地保存时考虑 IndexedDB；部署：静态网页，无默认云存储。",
+                "evaluation": {
+                  "fit_to_confirmed_requirements": "MEDIUM",
+                  "implementation_complexity": "MEDIUM",
+                  "operational_complexity": "MEDIUM",
+                  "expected_cost": "MEDIUM",
+                  "privacy_security": "MEDIUM",
+                  "vendor_lock_in": "MEDIUM",
+                  "offline_local_requirements": "MEDIUM",
+                  "xdev_support_maturity": "MEDIUM",
+                  "owner_maintenance_ability": "MEDIUM",
+                  "migration_path": "保留已确认的产品行为与数据边界；更换材料性技术约束前由 Owner 批准。"
+                },
+                "trade_offs": [
+                  "减少服务端运维；多用户共享、跨设备同步与本地数据恢复需要额外方案。"
+                ],
+                "risks": [
+                  "版本、平台兼容、授权、费用和性能须在正式选型及开发前查证；当前比较是可撤回的方案建议，未验证 XDev 对该技术的支持。"
+                ]
+              }
+            ],
+            "recommendation": {
+              "option_id": "SOLUTION-OPTION-WEB-TYPESCRIPT",
+              "why_it_fits": "根据已确认的平台与部署约束，建议先比较此方案；这是候选推荐，不代表已经验证性能、成本或开发支持。参考需求：DEPLOY-L, SCALE-L, NOINT-L, COST-L, PLATFORM-L。",
+              "trade_offs": [
+                "前后端语言一致；需承担服务端运行、鉴权、备份与数据库维护。"
+              ],
+              "risks": [
+                "版本、平台兼容、授权、费用和性能须在正式选型及开发前查证；当前比较是可撤回的方案建议，未验证 XDev 对该技术的支持。"
+              ],
+              "owner_decision_required": true,
+              "confidence": "LOW",
+              "unresolved_inputs": [
+                "版本、平台兼容、授权、费用和性能须在正式选型及开发前查证；当前比较是可撤回的方案建议，未验证 XDev 对该技术的支持。"
+              ]
+            },
+            "production_gaps": [
+              "FAST_DEVELOPMENT is not a production certification; full operations, recovery evidence, domain audit and immutable release evidence remain later gates."
+            ],
+            "approval_triggers": [
+              "LONG_TERM_MAINTENANCE",
+              "RECURRING_COST",
+              "THIRD_PARTY_LOCK_IN",
+              "OFFLINE_CAPABILITY"
+            ],
+            "owner_disposition": null,
+            "delegation": null,
+            "ai_capability_profile": null,
+            "model_resolution": null
+          }
+        }
+      },
+      "previous_hash": "d2b9b94bcb37b3edac8d252b5fa850395b5273ffd0ce24395b4c1a842c3e7d40",
+      "hash": "4b0fe4203a0db509c34581ba2ba330e88322ee805a66ba4521d350112091119e"
+    },
+    {
+      "event_id": "EVENT-1A3F45D5-3663-4811-AC63-7489206CF336",
+      "project_id": "XMI-479777F1-28D5-46D8-9F02-8E460FA84481",
+      "version": 25,
+      "actor": "owner",
+      "occurred_at": "2026-10-01T00:00:00.000Z",
+      "command": {
+        "kind": "SOLUTION_BLUEPRINT_APPROVED",
+        "item_id": "BLUEPRINT-D050405A75E9",
+        "fingerprint": "320d3e77791ee969f6fde8d9e29c89017c57df580a39a44b828b668e15e5fb21",
+        "owner_action": {
+          "intent": "APPROVE_BLUEPRINT",
+          "source_ref": {
+            "type": "owner_action",
+            "ref": "fixture:legacy-blueprint-risk"
+          }
+        }
+      },
+      "previous_hash": "4b0fe4203a0db509c34581ba2ba330e88322ee805a66ba4521d350112091119e",
+      "hash": "978690686986cb556beffcadf337d1f072076c39cb714e931eac998163cda126"
+    }
+  ]
+}

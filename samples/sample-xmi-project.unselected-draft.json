@@ -1,0 +1,24 @@
+{
+  "schema_version": "0.2.0",
+  "project_id": "XMI-DRAFT",
+  "xspec_id": "XSPEC-DRAFT",
+  "title": "Unconfirmed appointment idea",
+  "profile": "web-micro-saas-v0",
+  "delivery_policy": null,
+  "lifecycle_state": "DRAFT",
+  "model_version": 1,
+  "items": [{
+    "id": "VISION-DRAFT",
+    "type": "vision",
+    "statement": "Track appointments",
+    "status": "PROPOSED",
+    "source_refs": [{"type": "conversation_turn", "ref": "fixture:idea"}],
+    "version": 1,
+    "created_at": "2026-09-15T08:00:00.000Z",
+    "updated_at": "2026-09-15T08:00:00.000Z"
+  }],
+  "open_questions": [],
+  "current_xspec_version": null,
+  "created_at": "2026-09-15T08:00:00.000Z",
+  "updated_at": "2026-09-15T08:00:00.000Z"
+}

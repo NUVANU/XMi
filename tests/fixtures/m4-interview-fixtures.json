@@ -1,0 +1,7 @@
+[
+  {"id":"prototype-core","mode":"FAST_VALIDATION","expected_max_questions":3},
+  {"id":"reviewed-mvp","mode":"FAST_DEVELOPMENT","expected_max_questions":3},
+  {"id":"product-grade-upgrade","mode":"PRODUCT_GRADE","expected_max_questions":3},
+  {"id":"contradiction-private-data","expect_blocking_contradiction":true},
+  {"id":"risk-payment-fast-mode","expect_risk_hint":"PAYMENT_OR_FINANCIAL"}
+]

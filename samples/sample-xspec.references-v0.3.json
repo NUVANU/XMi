@@ -1,0 +1,404 @@
+{
+  "schema_version": "0.3.0",
+  "spec_id": "XSPEC-SCOPEGUARD-DEMO",
+  "spec_version": "0.3.0",
+  "project": {
+    "project_id": "XMI-SCOPEGUARD-DEMO",
+    "name": "ScopeGuard",
+    "summary": "A small web app that records client change requests and produces an approval link before extra work begins."
+  },
+  "profile": {
+    "id": "web-micro-saas-v0",
+    "version": "0.2.0",
+    "supported": true
+  },
+  "delivery_profile": {
+    "project_mode": "FAST_DEVELOPMENT",
+    "selection_source": "OWNER_CONFIRMED",
+    "readiness_target": "BUILD_READY",
+    "scope_overrides": [],
+    "handoff_contract_version": "1"
+  },
+  "product_vision": {
+    "id": "VISION-001",
+    "statement": "Help small web agencies prevent unpaid scope creep by documenting and approving change requests.",
+    "status": "CONFIRMED",
+    "priority": "P0",
+    "source_refs": [
+      {
+        "type": "owner_action",
+        "ref": "turn-0004",
+        "excerpt": "I want the client to approve extra work before we start."
+      }
+    ],
+    "links": []
+  },
+  "actors": [
+    {
+      "id": "ACTOR-AGENCY",
+      "statement": "Agency team member who creates and tracks change requests.",
+      "status": "CONFIRMED",
+      "priority": "P0",
+      "source_refs": [
+        {
+          "type": "owner_action",
+          "ref": "turn-0006"
+        }
+      ],
+      "links": []
+    },
+    {
+      "id": "ACTOR-CLIENT",
+      "statement": "Client contact who reviews and approves or rejects a change request through a secure link.",
+      "status": "CONFIRMED",
+      "priority": "P0",
+      "source_refs": [
+        {
+          "type": "owner_action",
+          "ref": "turn-0007"
+        }
+      ],
+      "links": []
+    }
+  ],
+  "goals": [
+    {
+      "id": "GOAL-001",
+      "statement": "Record scope, price and schedule impact before additional work starts.",
+      "status": "CONFIRMED",
+      "priority": "P0",
+      "source_refs": [
+        {
+          "type": "owner_action",
+          "ref": "turn-0008"
+        }
+      ],
+      "links": []
+    }
+  ],
+  "out_of_scope": [
+    {
+      "id": "EXCL-001",
+      "statement": "V0 will not process payments or replace the agency's invoicing system.",
+      "status": "CONFIRMED",
+      "priority": "P1",
+      "source_refs": [
+        {
+          "type": "owner_action",
+          "ref": "turn-0011"
+        }
+      ],
+      "links": []
+    }
+  ],
+  "user_flows": [
+    {
+      "id": "FLOW-001",
+      "statement": "Agency creates a change request and sends an approval link to the client.",
+      "status": "CONFIRMED",
+      "priority": "P0",
+      "source_refs": [
+        {
+          "type": "owner_action",
+          "ref": "turn-0015"
+        }
+      ],
+      "links": [
+        "REQ-CR-001",
+        "REQ-CR-002"
+      ],
+      "actor_ids": [
+        "ACTOR-AGENCY",
+        "ACTOR-CLIENT"
+      ],
+      "steps": [
+        "Agency creates a request with description, price and schedule impact.",
+        "System creates a secure single-request link.",
+        "Client approves or rejects and may add a comment.",
+        "Agency sees the immutable decision record."
+      ],
+      "failure_paths": [
+        "Expired or invalid link shows a clear error and asks the agency to issue a new link."
+      ]
+    }
+  ],
+  "requirements": [
+    {
+      "id": "REQ-CR-001",
+      "statement": "An agency user can create a change request containing description, price impact and schedule impact.",
+      "status": "CONFIRMED",
+      "priority": "P0",
+      "source_refs": [
+        {
+          "type": "owner_action",
+          "ref": "turn-0015"
+        }
+      ],
+      "links": [
+        "FLOW-001",
+        "CONSTRAINT-REFERENCE-SAMPLE",
+        "REQ-REFERENCE-SAMPLE-OLD"
+      ],
+      "acceptance_criterion_ids": [
+        "AC-CR-001"
+      ]
+    },
+    {
+      "id": "REQ-CR-002",
+      "statement": "A client can approve or reject exactly one change request through a secure link without creating an account.",
+      "status": "CONFIRMED",
+      "priority": "P0",
+      "source_refs": [
+        {
+          "type": "owner_action",
+          "ref": "turn-0017"
+        }
+      ],
+      "links": [
+        "FLOW-001"
+      ],
+      "acceptance_criterion_ids": [
+        "AC-CR-002",
+        "AC-CR-003"
+      ]
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "AC-CR-001",
+      "statement": "Given an authenticated agency user, when all required fields are valid, saving creates a draft request and displays its identifier.",
+      "status": "CONFIRMED",
+      "priority": "P0",
+      "source_refs": [
+        {
+          "type": "owner_action",
+          "ref": "turn-0020"
+        }
+      ],
+      "links": [
+        "REQ-CR-001"
+      ],
+      "requirement_ids": [
+        "REQ-CR-001"
+      ],
+      "testability": "AUTOMATED"
+    },
+    {
+      "id": "AC-CR-002",
+      "statement": "Given a valid unexpired approval link, when the client selects approve, the request becomes approved with timestamp and optional comment and cannot be approved a second time.",
+      "status": "CONFIRMED",
+      "priority": "P0",
+      "source_refs": [
+        {
+          "type": "owner_action",
+          "ref": "turn-0021"
+        }
+      ],
+      "links": [
+        "REQ-CR-002"
+      ],
+      "requirement_ids": [
+        "REQ-CR-002"
+      ],
+      "testability": "AUTOMATED"
+    },
+    {
+      "id": "AC-CR-003",
+      "statement": "Given an invalid or expired link, the system reveals no request details and displays an instruction to contact the agency for a new link.",
+      "status": "CONFIRMED",
+      "priority": "P0",
+      "source_refs": [
+        {
+          "type": "owner_action",
+          "ref": "turn-0022"
+        }
+      ],
+      "links": [
+        "REQ-CR-002"
+      ],
+      "requirement_ids": [
+        "REQ-CR-002"
+      ],
+      "testability": "AUTOMATED"
+    }
+  ],
+  "data_entities": [
+    {
+      "id": "DATA-CHANGE-REQUEST",
+      "statement": "Change request with agency ownership, client-facing token, description, price impact, schedule impact, status and decision metadata.",
+      "status": "CONFIRMED",
+      "priority": "P0",
+      "source_refs": [
+        {
+          "type": "owner_action",
+          "ref": "turn-0024"
+        }
+      ],
+      "links": [
+        "REQ-CR-001",
+        "REQ-CR-002"
+      ]
+    }
+  ],
+  "permission_rules": [
+    {
+      "id": "PERM-001",
+      "statement": "Agency accounts can access only change requests belonging to their own agency workspace.",
+      "status": "CONFIRMED",
+      "priority": "P0",
+      "source_refs": [
+        {
+          "type": "owner_action",
+          "ref": "turn-0025"
+        }
+      ],
+      "links": []
+    }
+  ],
+  "integrations": [],
+  "non_functional_requirements": [
+    {
+      "id": "NFR-SEC-001",
+      "statement": "Client approval tokens must be unguessable, stored safely and revocable by the agency.",
+      "status": "CONFIRMED",
+      "priority": "P0",
+      "source_refs": [
+        {
+          "type": "owner_action",
+          "ref": "turn-0026"
+        }
+      ],
+      "links": [
+        "REQ-CR-002"
+      ]
+    }
+  ],
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "statement": "Client approval in V0 does not require a client account.",
+      "status": "CONFIRMED",
+      "priority": "P0",
+      "source_refs": [
+        {
+          "type": "owner_action",
+          "ref": "turn-0017"
+        }
+      ],
+      "links": [
+        "REQ-CR-002"
+      ],
+      "selected_option": "Secure approval link",
+      "alternatives": [
+        "Client account login"
+      ]
+    }
+  ],
+  "risks": [
+    {
+      "id": "RISK-001",
+      "statement": "Forwarded approval links could allow the wrong person to act; V0 mitigates with revocation, expiry and clear agency responsibility.",
+      "status": "CONFIRMED",
+      "priority": "P1",
+      "source_refs": [
+        {
+          "type": "owner_action",
+          "ref": "turn-0028"
+        }
+      ],
+      "links": [
+        "REQ-CR-002"
+      ]
+    }
+  ],
+  "solution_blueprint": {
+    "status": "CONFIRMED",
+    "recommended_option": "Responsive web application with server-side API, relational database and token-based client approval route.",
+    "constraints": [
+      "Tenant data isolation is mandatory",
+      "Client link reveals no data when invalid or expired"
+    ],
+    "alternatives": [
+      "Client account portal"
+    ],
+    "delegated_to_xdev": [
+      "Framework selection within supported web stack",
+      "Detailed module architecture"
+    ],
+    "model_capability_profile": null
+  },
+  "open_questions": [],
+  "readiness": {
+    "status": "NOT_READY",
+    "hard_gates": [
+      {
+        "id": "RG-001",
+        "passed": true,
+        "details": "No blocking questions."
+      },
+      {
+        "id": "RG-AC",
+        "passed": true,
+        "details": "All P0/P1 requirements have acceptance criteria."
+      },
+      {
+        "id": "RG-AUDIT",
+        "passed": false,
+        "details": "M8 independent audit has not been executed for this M7 sample."
+      }
+    ],
+    "blocking_count": 0,
+    "audit_run_id": null,
+    "owner_confirmed_export": false,
+    "dimensions": {
+      "vision": 100,
+      "flows": 95,
+      "requirements": 95,
+      "data_permissions": 90,
+      "testability": 95
+    },
+    "target_mode": "FAST_DEVELOPMENT",
+    "target_level": "BUILD_READY",
+    "achieved_level": null,
+    "assurance_level": "INDEPENDENT_SPEC_REVIEW",
+    "mode_gap_count": 0
+  },
+  "provenance_summary": {
+    "confirmed_count": 18,
+    "source_ref_count": 18
+  },
+  "integrity": {
+    "canonical_sha256": "714a9a406ccef79a8e5d7fe044ab642dbc1f34cb915f46d71c011190edc217f3"
+  },
+  "generated_at": "2026-09-04T00:00:00Z",
+  "reference_records": [
+    {
+      "id": "CONSTRAINT-REFERENCE-SAMPLE",
+      "kind": "CONFIRMED_CONSTRAINT",
+      "item_type": "constraint",
+      "status": "CONFIRMED",
+      "item_version": 1,
+      "statement": "Keep the recorded version and its provenance.",
+      "source_refs": [
+        {
+          "type": "document",
+          "ref": "fixture:reference-sample"
+        }
+      ]
+    },
+    {
+      "id": "REQ-REFERENCE-SAMPLE-OLD",
+      "kind": "HISTORICAL",
+      "item_type": "functional_requirement",
+      "status": "REJECTED",
+      "item_version": 2,
+      "statement": "Historical example only; not a current requirement.",
+      "source_refs": [
+        {
+          "type": "document",
+          "ref": "fixture:reference-sample"
+        }
+      ]
+    }
+  ]
+}

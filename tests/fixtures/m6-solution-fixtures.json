@@ -1,0 +1,8 @@
+[
+  {"id":"missing-feasibility-inputs","mode":"FAST_DEVELOPMENT","expect_status":"BLOCKED_PREREQUISITES","expect_proposal":false},
+  {"id":"complete-feasibility-proposal","mode":"FAST_DEVELOPMENT","expect_status":"PROPOSAL_AVAILABLE","expect_proposal":true},
+  {"id":"fast-validation-production-gap","mode":"FAST_VALIDATION","expect_production_gaps":true},
+  {"id":"payment-risk-before-blueprint","mode":"FAST_VALIDATION","risk":"PAYMENT_OR_FINANCIAL","expect_status":"BLOCKED_RISK","expect_proposal":false},
+  {"id":"proposal-needs-owner-disposition","mode":"FAST_DEVELOPMENT","expect_gate_11":"FAIL"},
+  {"id":"approved-or-delegated-blueprint","mode":"FAST_DEVELOPMENT","expect_gate_11":"PASS"}
+]

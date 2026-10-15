@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${PLUGIN_ROOT}/hooks/on-user-prompt.mjs\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

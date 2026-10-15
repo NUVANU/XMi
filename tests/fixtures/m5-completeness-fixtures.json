@@ -1,0 +1,5 @@
+[
+  {"id":"incomplete-fast-development","mode":"FAST_DEVELOPMENT","expect_blocker_category":"PROFILE","expect_ready":false},
+  {"id":"polished-but-blocked","mode":"PRODUCT_GRADE","open_blocker":true,"expect_ready":false},
+  {"id":"payment-fast-mode","mode":"FAST_VALIDATION","risk_statement":"Customers pay a recurring subscription with Stripe and refunds are supported.","expected_reason":"PAYMENT_OR_FINANCIAL","expected_minimum_mode":"PRODUCT_GRADE"}
+]

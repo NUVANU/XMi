@@ -1,0 +1,13 @@
+# ADR-018 — Risk review compatibility and DOCX isolation
+
+Owner requested these corrections on 2026-10-15, then specified completion and review before packaging. The frozen XDEV-DELIVERY-HANDOFF/1 triple and its whole-ID exclusion semantics remain unchanged.
+
+Risk matching uses product statements rather than provenance/module tags. Specific operational health and breaking-change terms are normalized only in bounded contexts; personal medical content remains a signal. Negated, future and ambiguous claims are not silently approved. Complete matching scopes are returned without the former first-50 truncation.
+
+The existing whole-ID exclusion operation refuses detected mixed statements before consent or writes and reports exclusion_requires_split_ids. It cannot infer arbitrary natural-language intent. The interview must show retained/current and deferred behavior together and propose separately sourced items for Owner review. No engineering repair may invent or approve that product split.
+
+Historical MODE_OVERRIDE_RESOLVED and blueprint approval/delegation events keep their original risk evaluator and projected rationale. New writes receive internal risk_revision=2 after request validation and before persistence; the original request hash still governs retries. Current risk resolution stores the exact Owner rationale and appends system_rule provenance xmi-risk-resolution/2. That provenance distinguishes projection semantics and does not grant consent. Legacy dispositions remain historical, require fresh review, and cannot silently authorize new solution approval or valid export. No database rewrite or canonical snapshot schema change is required. Older executables must not be used to write new revision-2 histories.
+
+DOCX retains Mammoth's document API. Local extraction runs in a fixed child with bounded stdin/output, a 10-second timeout, a V8 old-heap setting and a minimal environment. It forwards neither filenames nor third-party diagnostics. This is process/resource isolation, not an OS sandbox. Cloud source retains the standalone browser API that excludes the CLI parser chain and adds an output limit. Upstream CLI-only dependency alerts stay disclosed; no forced downgrade, new service or authentication change is introduced.
+
+Verification includes frozen pre-fix risk and blueprint fixtures, current rationale export, mixed-scope refusal before forms, stale/unconfirmed/archived scope, over-50 scope completeness, actual API dependency loading, malformed/oversized DOCX and genuine private-test-project read-only replay. Product approvals and real consumer/auditor acceptance remain separate gates.

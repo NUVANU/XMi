@@ -1,0 +1,29 @@
+# XMem local data and install artifacts (kept on disk, not versioned)
+.xmem/
+.xmem-codex-install/
+xmem-bridge-state/
+*.xmem-backup-*
+
+node_modules/
+dist/
+.npm-cache/
+.m0-python/
+
+# Local manual backups (git history already preserves the previous version)
+*.bak-*
+
+exports/
+.xmi-install/
+_e2e/
+# OpenAI Site source is maintained in its separate provisioned source repository.
+/apps/cloud-site/
+
+# Never publish personal host state or product data
+.codex/
+.xmi-install/
+.env
+.env.*
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.jsonl

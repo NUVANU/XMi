@@ -1,0 +1,19 @@
+{
+  "name": "xmi",
+  "version": "0.1.0",
+  "description": "XMi private local product-definition plugin",
+  "author": {
+    "name": "Local developer"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "XMi",
+    "shortDescription": "Turn product intent into a canonical, auditable XSpec.",
+    "longDescription": "XMi provides local Skills plus a stateful MCP server for discovery, audit, readiness, XSpec compilation and controlled export.",
+    "developerName": "Local developer",
+    "category": "Productivity",
+    "capabilities": [],
+    "defaultPrompt": "Help me create or resume an XMi product-definition project."
+  },
+  "mcpServers": "./.mcp.json"
+}

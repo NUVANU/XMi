@@ -1,0 +1,5 @@
+* text=auto eol=lf
+*.zip binary
+*.png binary
+# Upstream provenance hashes require original bytes on every checkout.
+packages/mammoth-api/** -text

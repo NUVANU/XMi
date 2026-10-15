@@ -1,0 +1,57 @@
+{
+  "schema_version": "0.1.0",
+  "purpose": "M9 local private cross-surface acceptance protocol; this fixture is not itself real-host evidence.",
+  "local_surface_pair": {
+    "surface_a": "Codex CLI",
+    "surface_b": "Codex IDE or desktop",
+    "transport": "STDIO",
+    "canonical_state": "SAME_ABSOLUTE_SQLITE_PATH",
+    "required_observation": "Create and advance one project on surface A; close it; resume the same project id on surface B without prior transcript and observe the same canonical mode/items/model version."
+  },
+  "same_surface_subprocess_probe": {
+    "surface": "STDIO test harness",
+    "counts_as_cross_surface": false,
+    "purpose": "Deterministic process/session continuity, tool-only chain, logging and injection regression coverage."
+  },
+  "remote_connectivity": {
+    "decision": "NOT_APPROVED_FOR_M9",
+    "owner_decision_required": true,
+    "evidence_disposition": "BLOCKED_SCOPE_DECISION",
+    "must_not_attempt": [
+      "public HTTPS hosting",
+      "Secure MCP Tunnel",
+      "authentication",
+      "paid infrastructure"
+    ]
+  },
+  "minimum_tool_only_chain": [
+    "xmi_project_create",
+    "xmi_project_resume",
+    "xmi_item_confirm",
+    "xmi_readiness_evaluate",
+    "xmi_xspec_compile",
+    "xmi_xspec_validate"
+  ],
+  "negative_routes": [
+    {
+      "id": "m9-negative-code",
+      "prompt": "Fix this TypeScript function for me.",
+      "expected_skill": null
+    },
+    {
+      "id": "m9-negative-summary",
+      "prompt": "Summarize this document without starting a product project.",
+      "expected_skill": null
+    },
+    {
+      "id": "m9-discovery",
+      "prompt": "I have an app idea; ask me questions and turn it into requirements.",
+      "expected_skill": "xmi-discovery"
+    },
+    {
+      "id": "m9-audit",
+      "prompt": "Resume my XMi project and check readiness before export.",
+      "expected_skill": "xmi-audit-export"
+    }
+  ]
+}

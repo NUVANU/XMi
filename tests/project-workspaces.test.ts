@@ -1,7 +1,7 @@
 import test from "node:test";
 import type {TestContext} from "node:test";
 import assert from "node:assert/strict";
-import {cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync} from "node:fs";
+import {cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync} from "node:fs";
 import {join, resolve} from "node:path";
 import {tmpdir} from "node:os";
 import {spawnSync} from "node:child_process";
@@ -28,7 +28,8 @@ async function call(client: Client, name: keyof typeof outputs, args: Record<str
   assert.ok(outputs[name].safeParse(value).success); return JSON.parse(JSON.stringify(value));
 }
 async function fixture(t: TestContext, native = false) {
-  const root = mkdtempSync(join(tmpdir(), "xmi-project-local-")), folder = join(root, "project"); mkdirSync(folder);
+  // Windows runners may expose TEMP through an 8.3 alias; internal helpers use the selected real root.
+  const root = realpathSync.native(mkdtempSync(join(tmpdir(), "xmi-project-local-"))), folder = join(root, "project"); mkdirSync(folder);
   writeFileSync(join(folder, "existing-source.txt"), "Keep my engineering files.");
   const memory = new MemoryProjectStore(), legacy = new ProjectService(memory), manager = new ProjectWorkspaces(join(root, "locations.sqlite"));
   const session = "00000000-0000-4000-8000-000000000001", turn = "00000000-0000-4000-8000-000000000002";
@@ -180,7 +181,7 @@ test("native genuine-reply fixture confirms the selected local database, not the
 });
 
 test("project XSpec export is inside docs/xspec and refuses linked export destinations", t => {
-  const base = mkdtempSync(join(tmpdir(), "xmi-project-export-")); t.after(() => rmSync(base, {recursive: true, force: true}));
+  const base = realpathSync.native(mkdtempSync(join(tmpdir(), "xmi-project-export-"))); t.after(() => rmSync(base, {recursive: true, force: true}));
   const service = new XSpecService(resolve(base)), p = reviewProject(), artifact = service.compile(p);
   const out = service.writeExport(artifact, "v1", false);
   assert.equal(out.relative_path, "docs/xspec/v1"); assert.equal(existsSync(join(base, out.relative_path, "manifest.json")), true);
@@ -190,7 +191,7 @@ test("project XSpec export is inside docs/xspec and refuses linked export destin
 });
 
 test("fresh actual native STDIO uses project folders and a second runtime resumes without the original chat", async t => {
-  const root = mkdtempSync(join(tmpdir(), "xmi-project-stdio-")), folder = join(root, "project");
+  const root = realpathSync.native(mkdtempSync(join(tmpdir(), "xmi-project-stdio-"))), folder = join(root, "project");
   t.after(() => rmSync(root, {recursive: true, force: true}));
   async function connect(db: string) {
     const client = new Client({name: "portable-stdio-fixture", version: "1"}, {capabilities: {elicitation: {form: {}}}});

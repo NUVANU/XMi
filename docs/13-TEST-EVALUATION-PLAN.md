@@ -1,5 +1,7 @@
 # 13 - Test and Evaluation Plan
 
+Independent-review phase one adds synthetic core/MCP cases for exact model/file/material/policy and complete scoped bindings, all16 document delivery/coverage, grounded nonblank findings, overflow refusal, compiler-exact metadata-only derivation, immutable separate-store integrity, cross-project refusal, cancellation/unknown/restart/idempotency, bounded findings pagination, unconfigured no-op and strict rejection of supplied reviewer authority. TEST_ONLY records never supply real independent-review evidence. The actual commands/results, including any environmental failure, are recorded in INDEPENDENT-SPEC-REVIEW-PHASE1-20261016.md; passing more deterministic tests does not satisfy F-3.
+
 ## 1. Test layers
 
 ### Unit tests

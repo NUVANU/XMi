@@ -351,7 +351,7 @@ test("M7 MCP surface adds the three documented tools and export is write+destruc
   for (const name of ["xmi_xspec_compile", "xmi_xspec_validate", "xmi_export_package"] as const) assert.ok(metadata[name]);
   // 17 since F-9 added the Owner withdrawal tool for a mode-risk override. The M7 assertion above
   // still checks exactly the three contracts it owns; only the surface total moved.
-  assert.equal(toolDescriptors.length, 26); // Module and single-item lists plus native receipts/commit.
+  assert.equal(toolDescriptors.length, 28); // Module and single-item lists plus native receipts/commit.
   assert.equal(metadata.xmi_xspec_compile.write, false);
   assert.equal(metadata.xmi_xspec_validate.write, false);
   assert.equal(metadata.xmi_export_package.write, true);

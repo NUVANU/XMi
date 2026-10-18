@@ -61,6 +61,18 @@ function fixture(t: TestContext) {
   return {directory, db, store, service, project, host, prompt, grantPrompt, display, appendMessage};
 }
 
+test("exiting design revokes a pending module list without instructing another XMi review", t => {
+  const f = fixture(t);
+  f.grantPrompt("启用 XMi");
+  f.host.prepare(f.project, "技能");
+  const before = fingerprint(f.service.get(f.project.project_id));
+  const context = f.grantPrompt("退出 XMi 设计模式");
+  assert.match(context, /设计模式已退出/);
+  assert.doesNotMatch(context, /重新展示|review_commit|At finalization/);
+  assert.equal(readPending(f.directory, session)?.status, "INVALIDATED");
+  assert.equal(fingerprint(f.service.get(f.project.project_id)), before);
+});
+
 test("module list includes full ordinary statements from one module and creates no confirmation", t => {
   const f = fixture(t);
   f.prompt("继续讨论");

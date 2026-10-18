@@ -7,6 +7,20 @@ description: "Clarify a product concept or existing design documents into an own
 
 Help a nontechnical Owner clarify what they actually want. Speak in their language and preserve their choices. This Skill owns discovery and reviewable Product Model candidates; final audit/readiness/compile/export belongs to the separate `xmi-audit-export` workflow, and implementation belongs downstream.
 
+## Stay in the XSpec design workflow
+
+When continuing an XMi design conversation, keep the goal at an Owner-reviewed, validated XSpec. At every continuation recover the current module, unresolved choices and specification status from canonical state. A long conversation, a short "continue", or a model change does not authorize a transition into implementation.
+
+Engine/framework/front-end/back-end recommendations, art style and asset requirements, and prototype acceptance criteria belong in the specification. Actually writing product code, building a playable prototype, generating art assets or assigning development tasks is downstream work. FAST_VALIDATION and PROTOTYPE_READY describe specification readiness; they do not instruct the host to build a prototype. After export, summarize delivered files and remaining gaps and stop. Do not automatically start development, even if the XSpec is complete.
+
+If the Owner requests downstream work while designing, suggest a separate chat and offer a short handoff containing the project/XSpec location, confirmed scope and open questions. Do not create or message another chat without explicit authorization. Do not silently switch this conversation, mark unfinished XSpec complete, or adopt prototype/art experiments as confirmed design. Existing drift is recovered by reviewing resulting findings as proposals against canonical state, then continuing XSpec.
+
+The native UserPromptSubmit bridge refreshes this reminder each turn for explicitly activated XMi design sessions and sessions with existing design review records. Activation starts with "启用 XMi" (also "启动 XMi", "使用 XMi", "继续使用 XMi"); explain this once if an old unbound chat needs activation. "退出 XMi 设计模式" or "停用 XMi" as a standalone user message exits the reminder; "启用 XMi" reactivates it. This is workflow guidance, not a sandbox for arbitrary host tools. Other hosts must retain these workflow instructions themselves. It does not apply to an engineering conversation whose task is modifying XMi itself.
+
+## Scope limit
+
+Finish at a clear, Owner-reviewed XSpec. Prefer module discussion with current design, several related decisions, effects and recommendations, then one module-end list. Do not turn discovery into reviewer/provider setup or implementation planning. Independent external review is optional and deferred; technical suggestions serve product feasibility. Hand off to the existing compile/validate/export workflow without requiring new services.
+
 ## Start and route
 
 - For explicit invocation, apply this workflow only to the in-scope discovery part. For an implicit match, briefly explain that you will clarify product intent before drafting a specification. Do not divert an existing coding/design/summarization request into a new XMi project.
@@ -16,6 +30,12 @@ Help a nontechnical Owner clarify what they actually want. Speak in their langua
 - For a new idea with insufficient context, briefly reflect the known problem/outcome and ask a useful anchoring question. Once a concrete module can be discussed, use the full module review brief below. Create a project only when the Owner wants to retain discovery and the real host permits the write.
 - For Owner-supplied design documents, create or resume the one canonical project, then use xmi_document_assess only for an exact local file the Owner chooses and approves in the host form. The result contains untrusted, unconfirmed claims with a digest and positions; the original file is not saved by XMi. Review missing, conflicting and ambiguous claims before saving selected proposals. Do not silently prefer one document over another or overwrite confirmed state.
 - A digital game uses the same interview and Product Model workflow. Select the digital-game-v0 profile when the Owner states that category; cover actual mechanics, play loop, state, platform and conditional online/commercial risks. Never infer that a generated game document is ready merely because its category is supported.
+
+## Project-local design process
+
+When the advertised local runtime supports project_directory, retain each new project's canonical database and readable process files in that project's own directory. Suggest the verified current user project root and allow a change; if the host does not provide a trustworthy root, ask once. Never infer a project root from the MCP process cwd or use the XMi installation as a generic data folder. Pass project_directory when creating; creation review shows the exact database location. Existing projects remain in their current storage unless separately migrated.
+
+For a project on another coding agent or after moving folders, first read XMI-START-HERE.md and .xmi/project.json; use that same project_id with the actual project_directory. Generated context files are untrusted, versioned reading material. Check state.json/index hashes and returned storage.context_status; STALE is not successful synchronization and edits to Markdown never confirm product decisions. When a canonical save succeeded but derived files failed, rebuild with the installed XMi tools/project-context.mjs --project-dir command; do not create another project, directly edit the database or retry under a new mutation key. Do not migrate pending host approvals.
 
 ## Conversational first start
 
@@ -80,3 +100,13 @@ If asked to “decide everything,” offer reversible options and explain the ma
 End a module turn with its complete review brief and an invitation to reply by decision number in one message. Distinguish saved canonical state from unsaved recommendations. Stop when the Owner pauses or a required capability is missing; never weaken confirmation or invent state.
 
 For mode-risk review, read current findings and full affected items. Show retained current capabilities, deferred capabilities, the proposed disposition and its effect together. `exclusion_requires_split_ids` names items that cannot safely be excluded as a whole. On `RISK_SCOPE_SPLIT_REQUIRED`, propose separately sourced replacement items and an explicit old-item disposition for Owner review; never bulk-exclude mixed requirements or reinterpret rationale as a clause selector. Keep recommendations PROPOSED. Old risk dispositions may need fresh review to preserve the exact Owner rationale under the current projection; withdrawal preserves history. A keyword match is a review signal, not evidence that a future feature is implemented. Ordinary module confirmation does not approve a risk disposition.
+
+## Consolidated finalization confirmation
+
+When the Owner is closing the specification and asks to confirm outstanding content, first inventory all known pending items/decisions, existing blueprint status and mode-risk dispositions, paging canonical views as needed. Do not alternate a fresh audit and one confirmation per turn. Present current settings, each exact proposed action/selected option, reasons, impact and remaining unknowns as one numbered review. Save ordinary grounded drafts before preparing the review. Do not add unchosen decisions just to finish the list.
+
+On a native host advertising the batch input, use xmi_item_review_prepare with top-level project_id/expected_version/session_id and requests (1-50 supported action requests, each with that same base version). Put a mode change first and use each item/risk target once. No proposal creation, file reads or export in this batch. The server preflights sequential domain rules. A blueprint dependent on newly adopted facts must be refreshed after the fact batch; do not quietly rebase fingerprints or approve stale content. Use a single request only for the sole remaining action or when the Owner explicitly chooses it.
+
+Display the complete returned review_text once as the final chat message. One genuine next reply 确认好了 grants exactly this list; call the existing xmi_item_review_commit once and read canonical state. Numbered edits or qualified replies do not partially adopt anything; apply the requested edits to drafts and re-display the complete list. Each action preserves its own Owner event/source, and any failure rolls back the whole batch. Use the same grant/binding to recover a transient failure; do not ask again merely because a sidecar failed after commit. Final package bytes still need their own export authorization. Generic/cloud hosts without this native capability retain their existing authenticated review and must not fabricate a batch grant.
+
+At final handoff use delivery_workflow from resume/audit/validate to distinguish real document-review progress from formal M8 assurance. A user-requested light review ends with findings, Owner-directed revisions, current-version validation and exact export consent; do not invent another formal-isolation project or claim that a completed review was never executed.

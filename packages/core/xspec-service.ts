@@ -7,6 +7,9 @@ import type {M8ReadinessEvidence, ReadinessEvaluation} from "./completeness-serv
 import {requireCondition} from "./errors.ts";
 import {solutionBlockingInputs} from "./solution-options.ts";
 import {canonical, fingerprint, rejectSecrets, schemaValidators} from "./validation.ts";
+import {projectPath} from "../storage/project-files.ts";
+import {documentDelivery, documentDeliveryMarkdown} from "./document-delivery.ts";
+import type {DeliveryWorkflow, DocumentReviewSummary} from "./document-delivery.ts";
 
 export const HANDOFF_CONTRACT_VERSION = "XDEV-DELIVERY-HANDOFF/1";
 const HANDOFF_VERSION_VALUE = "1";
@@ -369,7 +372,7 @@ function schemaFailureIsOnlyMissingAcceptance(xspec: XSpecDocument): boolean {
   return !!schemaValidators.xspec!(probe);
 }
 
-function buildArtifact(project: Project, evidence: M8ReadinessEvidence): CompiledArtifact {
+function buildArtifact(project: Project, evidence: M8ReadinessEvidence, delivery?: DeliveryWorkflow): CompiledArtifact {
   const xspec = compileDocument(project, evidence);
   rejectSecrets(xspec);
   const schemaValid = !!schemaValidators.xspec!(xspec);
@@ -382,6 +385,11 @@ function buildArtifact(project: Project, evidence: M8ReadinessEvidence): Compile
   files.set("xspec.json", pretty(xspec));
   for (const [path, content] of Object.entries(markdownFiles(xspec)) as Array<[Exclude<XSpecPackagePath, "manifest.json" | "xspec.json">, string]>) {
     files.set(path, content.endsWith("\n") ? content : content + "\n");
+  }
+  if (delivery) {
+    requireCondition(delivery.document_review.project_id === project.project_id &&
+      delivery.document_review.current_model_version === project.model_version, "DOCUMENT_REVIEW_VERSION_MISMATCH");
+    files.set("READINESS-REPORT.md", files.get("READINESS-REPORT.md")! + documentDeliveryMarkdown(delivery));
   }
   const payloadHashes = Object.fromEntries([...files.entries()].map(([path, content]) => [path, sha256(content)]));
   const manifest = {
@@ -542,12 +550,18 @@ function packageManifestValid(artifact: CompiledArtifact, xspec: XSpecDocument |
 }
 
 export class XSpecService {
-  compile(project: Project, evidence: Partial<M8ReadinessEvidence> = {}): CompiledArtifact {
+  private projectDirectory?: string;
+  constructor(projectDirectory?: string) {this.projectDirectory = projectDirectory;}
+  private exportRoot(packageName: string) {
+    return this.projectDirectory ? projectPath(this.projectDirectory, "docs", "xspec", packageName) : resolve(process.cwd(), "exports", packageName);
+  }
+  private exportRelative(packageName: string) {return `${this.projectDirectory ? "docs/xspec" : "exports"}/${packageName}`;}
+  compile(project: Project, evidence: Partial<M8ReadinessEvidence> = {}, delivery?: DeliveryWorkflow): CompiledArtifact {
     const resolved: M8ReadinessEvidence = {xui_compatible: evidence.xui_compatible ?? false,
       xdev_compatible: evidence.xdev_compatible ?? false, owner_confirmed_export: evidence.owner_confirmed_export ?? false,
       immutable_export_exists: evidence.immutable_export_exists ?? false, audit: evidence.audit ?? {audit_run_id: null,
         audit_status: "UNAVAILABLE", isolation_status: "UNAVAILABLE", assurance_level: null, blocking_finding_count: 0}};
-    return buildArtifact(project, resolved);
+    return buildArtifact(project, resolved, delivery);
   }
 
   validate(project: Project, artifact: CompiledArtifact, evidence: Partial<M8ReadinessEvidence> = {}): XSpecValidation {
@@ -640,7 +654,7 @@ export class XSpecService {
       consumers: {xui, xdev}, readiness_evaluation: readiness};
   }
 
-  finalizeForExport(project: Project, evidence: Partial<M8ReadinessEvidence> = {}): {artifact: CompiledArtifact; validation: XSpecValidation} {
+  finalizeForExport(project: Project, evidence: Partial<M8ReadinessEvidence> = {}, review?: DocumentReviewSummary): {artifact: CompiledArtifact; validation: XSpecValidation; delivery_workflow?: DeliveryWorkflow} {
     const candidate = this.compile(project, evidence);
     const first = this.validate(project, candidate, evidence);
     // Export is gated on the package being sound, not on any one consumer's disposition. XMi must be
@@ -653,32 +667,30 @@ export class XSpecService {
       xdev_compatible: first.consumers.xdev.accepted, owner_confirmed_export: true, immutable_export_exists: true,
       audit: evidence.audit ?? {audit_run_id: null, audit_status: "UNAVAILABLE", isolation_status: "UNAVAILABLE",
         assurance_level: null, blocking_finding_count: 0}};
-    const artifact = this.compile(project, finalEvidence);
+    const delivery = review ? documentDelivery(review, first.package_valid, first.readiness_evaluation) : undefined;
+    const artifact = this.compile(project, finalEvidence, delivery);
     const validation = this.validate(project, artifact, finalEvidence);
     requireCondition(validation.package_valid, "XSPEC_PACKAGE_INVALID");
-    return {artifact, validation};
+    return {artifact, validation, ...(delivery ? {delivery_workflow: delivery} : {})};
   }
 
   inspectExport(artifact: CompiledArtifact, packageName: string): {relative_path: string; status: "MISSING" | "IDENTICAL" | "DIFFERENT"} {
     requireCondition(/^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/.test(packageName), "EXPORT_DESTINATION_INVALID");
-    const root = resolve(process.cwd(), "exports");
-    const target = resolve(root, packageName);
-    requireCondition(target.startsWith(root + "/") || target.startsWith(root + "\\"), "EXPORT_DESTINATION_INVALID");
+    const target = this.exportRoot(packageName);
     const existingManifest = join(target, "manifest.json");
-    if (!existsSync(target)) return {relative_path: `exports/${packageName}`, status: "MISSING"};
+    if (!existsSync(target)) return {relative_path: this.exportRelative(packageName), status: "MISSING"};
     const manifest = artifact.files.find((file) => file.path === "manifest.json")!;
     if (existsSync(existingManifest) && readFileSync(existingManifest, "utf8") === manifest.content) {
-      return {relative_path: `exports/${packageName}`, status: "IDENTICAL"};
+      return {relative_path: this.exportRelative(packageName), status: "IDENTICAL"};
     }
-    return {relative_path: `exports/${packageName}`, status: "DIFFERENT"};
+    return {relative_path: this.exportRelative(packageName), status: "DIFFERENT"};
   }
 
   writeExport(artifact: CompiledArtifact, packageName: string, overwrite: boolean): {relative_path: string; already_present: boolean} {
     const inspected = this.inspectExport(artifact, packageName);
     if (inspected.status === "IDENTICAL") return {relative_path: inspected.relative_path, already_present: true};
     requireCondition(inspected.status !== "DIFFERENT" || overwrite, "EXPORT_DESTINATION_EXISTS");
-    const root = resolve(process.cwd(), "exports");
-    const target = resolve(root, packageName);
+    const target = this.exportRoot(packageName);
     if (inspected.status === "DIFFERENT") rmSync(target, {recursive: true, force: true});
     mkdirSync(target, {recursive: true});
     for (const file of artifact.files) writeFileSync(join(target, file.path), file.content, {encoding: "utf8"});

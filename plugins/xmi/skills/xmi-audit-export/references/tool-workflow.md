@@ -1,5 +1,13 @@
 # Current audit/readiness/export tool workflow
 
+At finalization, inventory all known remaining confirmations before requesting approval. Use the advertised native xmi_item_review_prepare requests batch for compatible actions, display its complete numbered review once, then commit after one genuine reply. Do not repeatedly audit and ask about one setting at a time. Keep individual selected options/reasons explicit; if new facts invalidate a blueprint, refresh it after the fact batch rather than waiving its fingerprint. Export still requires exact file authorization.
+
+## Optional independent review
+
+For the real native HOST_AGENT route, follow host-agent-review.md. Generic hosts remain unavailable. For the internal TEST_ONLY compatibility route, use `xmi_spec_review_start` with the exact current project version and idempotency key; query a known run with `xmi_spec_review_status`, respecting findings totals/next offset and item/document/scope coverage. Production is unconfigured and returns UNAVAILABLE without saving or sending materials. TEST_ONLY synthetic records never count as real review. Do not submit reviewer identities, JSON approvals, endpoints, credentials, isolation flags or PASS. Do not start a Codex child session or configure a service as a workaround. The Owner has deferred second-stage enablement. Do not request its configuration as the next step in ordinary delivery. Existing formal readiness and strict package validation remain authoritative, while valid NOT_READY candidate export is allowed under exact consent.
+
+## Existing audit/export sequence
+
 Discover the configured XMi tools and use their current schemas; the semantic names below are not permission to invent unavailable tools.
 
 1. `xmi_project_resume` / `xmi_project_get`: establish the exact canonical project/version. Refresh after any separate Owner mutation made outside this Skill.
@@ -10,7 +18,7 @@ Discover the configured XMi tools and use their current schemas; the semantic na
 6. `xmi_xspec_validate`: review package-intrinsic errors and consumer compatibility separately. Fix canonical state; do not hand-edit generated JSON/hashes.
 7. `xmi_export_package`: only after reviewing the exact package identity/destination. This is a write and requires independent host-form consent. Do not place actor/approval fields in arguments.
 
-Readiness is mode-specific. FAST_VALIDATION audit may be optional unless scoped escalation requires it; FAST_DEVELOPMENT requires independent Spec Review; PRODUCT_GRADE requires independent Product Audit plus immutable evidence. A failed/unavailable required dependency keeps the gate failed.
+XSpec delivery is the goal; do not require an external reviewer for compilation or a valid candidate export. Readiness is mode-specific and the following are legacy formal assurance conditions, not universal export prerequisites. FAST_VALIDATION audit may be optional unless scoped escalation requires it; FAST_DEVELOPMENT requires independent Spec Review; PRODUCT_GRADE requires independent Product Audit plus immutable evidence. A failed/unavailable required dependency keeps the gate failed.
 
 F-2 remains PARTIALLY_CLOSED. XDEV-DELIVERY-HANDOFF/1 semantics are frozen, but M10 real-XDev end-to-end evidence is still outstanding. Never convert structured scope overrides into free text or claim lossless compatibility.
 

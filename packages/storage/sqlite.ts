@@ -2,10 +2,13 @@ import { DatabaseSync } from "node:sqlite";
 import type { Checkpoint, DomainEvent, Project, Receipt } from "../shared-types/domain.ts";
 import type { ProjectStore, StoreTransaction } from "./store.ts";
 import { DomainError, requireCondition } from "../core/errors.ts";
+import {markContextUpdating} from "./project-context.ts";
 
 export class SqliteProjectStore implements ProjectStore {
   private db: DatabaseSync;
-  constructor(path: string) {
+  private projectDirectory?: string;
+  constructor(path: string, projectDirectory?: string) {
+    this.projectDirectory = projectDirectory;
     this.db = new DatabaseSync(path, { timeout: 5000, enableForeignKeyConstraints: true });
     try {
       const version = Number(this.db.prepare("PRAGMA user_version").get()!.user_version);
@@ -34,9 +37,11 @@ export class SqliteProjectStore implements ProjectStore {
       throw error;
     }
   }
+  projectIds(): string[] {return this.db.prepare("SELECT project_id FROM snapshots ORDER BY project_id").all().map(row => String(row.project_id));}
   transaction<T>(work: (tx: StoreTransaction) => T): T {
     try {
       this.db.exec("BEGIN IMMEDIATE");
+      let contextMarked = false;
       const one = (sql: string, key: string): unknown | undefined => {
         const row = this.db.prepare(sql).get(key);
         return row ? JSON.parse(String(row.body)) : undefined;
@@ -44,6 +49,8 @@ export class SqliteProjectStore implements ProjectStore {
       const tx: StoreTransaction = {
         snapshot: (id) => one("SELECT body FROM snapshots WHERE project_id=?", id),
         save: (p: Project) => {
+          // Mark under the writer lock before canonical save, once per transaction.
+          if (this.projectDirectory && !contextMarked) {markContextUpdating(this.projectDirectory, p.project_id); contextMarked = true;}
           this.db.prepare("INSERT INTO snapshots VALUES (?,?) ON CONFLICT(project_id) DO UPDATE SET body=excluded.body")
             .run(p.project_id, JSON.stringify(p));
         },

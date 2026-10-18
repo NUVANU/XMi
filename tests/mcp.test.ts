@@ -87,8 +87,9 @@ test("M2 discovery advertises exact narrow, typed tools with explicit safety hin
   // M7 formally adds the three documented XSpec compile/validate/export contracts, and F-9 adds the
   // Owner withdrawal tool for a mode-risk override.
   // This advances the old M2/M6 exact-count assertion without weakening any tool safety check.
-  assert.equal(listed.tools.length, 26); // Module and single-item lists plus native receipt read-back/commit.
-  assert.deepEqual(listed.tools.map((d) => d.name).sort(), Object.keys(metadata).sort());
+  assert.equal(listed.tools.length, 26); // Deferred reviewer prototypes are absent from the default catalog.
+  assert.deepEqual(listed.tools.map((d) => d.name).sort(), Object.keys(metadata)
+    .filter(name => !["xmi_spec_review_start", "xmi_spec_review_status"].includes(name)).sort());
   for (const tool of listed.tools) {
     assert.equal(tool.inputSchema.type, "object");
     assert.equal(tool.inputSchema.additionalProperties, false);

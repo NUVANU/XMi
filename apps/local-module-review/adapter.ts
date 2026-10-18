@@ -88,7 +88,7 @@ export function createModuleReviewHost(directory: string, session: string, dbPat
         requireCondition(Buffer.byteLength(text, "utf8") <= 1024 * 1024, "INVALID_REVIEW_RECORD");
         const single = JSON.parse(text);
         requireCondition(single.session_id === session, "INVALID_REVIEW_RECORD");
-        if (["PENDING", "GRANTED"].includes(single.status)) writeRecord(directory, session + ".single", {...single, command: null, status: "INVALIDATED"});
+        if (["PENDING", "GRANTED"].includes(single.status)) writeRecord(directory, session + ".single", {...single, command: null, ...(single.action === "BATCH" ? {commands: null} : {}), status: "INVALIDATED"});
       }
       writeRecord(directory, session, {session_id: session, db_path: dbPath, review: result.review,
         review_text_hash: createHash("sha256").update(result.review_text).digest("hex"),

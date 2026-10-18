@@ -1,7 +1,8 @@
 import { z } from "zod";
 import type { DeliveryMode, Item, Project } from "../shared-types/domain.ts";
 import { canonical, fingerprint } from "./validation.ts";
-import { evaluateRisk, isRiskScopeDeferred } from "./completeness-service.ts";
+import { isRiskScopeDeferred } from "./completeness-service.ts";
+import { paymentScope } from "./payment-scope.ts";
 
 export const auditFindingSchema = z.strictObject({
   id: z.string().regex(/^AUDIT-FINDING-[A-Z0-9-]+$/),
@@ -83,14 +84,13 @@ export class AuditService {
         "What should happen to the account and owned data when the user deletes or closes the account?"));
     }
 
-    const payment = confirmed(snapshot).filter((item) => /payment|billing|subscription|charge|支付|账单|订阅|扣款/i.test(body(item)));
-    const deferredScope = isRiskScopeDeferred(snapshot, "PAYMENT_OR_FINANCIAL")
-      ? evaluateRisk(snapshot).findings.find((entry) => entry.reason_code === "PAYMENT_OR_FINANCIAL")!.scope_ids : [];
-    const currentPayment = payment.filter((item) => !deferredScope.includes(item.id));
-    if (currentPayment.length && !hasConfirmed(snapshot, ["functional_requirement", "acceptance_criterion", "decision"],
-      /payment fail|card declined|billing fail|charge fail|支付失败|扣款失败|付款失败/i)) {
+    const payment = paymentScope(snapshot, isRiskScopeDeferred(snapshot, "PAYMENT_OR_FINANCIAL"));
+    if (payment.conflict && payment.confirmed_current_ids.length) findings.push(finding("PAYMENT_SCOPE_CONFLICT",
+      "Confirmed current payment behavior conflicts with a confirmed real-payment exclusion.",
+      [...payment.exclusion_ids, ...payment.confirmed_current_ids], "Resolve the conflicting payment scope before readiness."));
+    if (payment.confirmed_current_ids.length && !payment.failure_ids.length) {
       findings.push(finding("PAYMENT_FAILURE", "Payment/commercial success behavior exists without confirmed failure behavior.",
-        currentPayment.map((item) => item.id), "What does the user see and what state is preserved when payment fails or is declined?"));
+        payment.confirmed_current_ids, "What does the user see and what state is preserved when payment fails or is declined?"));
     }
 
     const smartAi = confirmed(snapshot).filter((item) => item.type === "functional_requirement" &&

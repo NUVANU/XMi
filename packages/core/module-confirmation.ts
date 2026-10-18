@@ -26,7 +26,7 @@ export function prepareModuleConfirmation(project: Project, module: string) {
   const list = members.map((item, index) => `${index + 1}. ${item.id}（${item.status}；${item.priority ?? "未定优先级"}；${item.type}）\n\n${quote(item.statement)}\n\n` +
     `   关联：${(item.links ?? []).join("、") || "无"}；替代：${item.supersedes ?? "无"}；标签：${(item.tags ?? []).join("、") || "无"}`).join("\n\n");
   const review_text = `## ${module}：模块确认清单\n\n项目版本：${review.project_version}；清单编号：${review.review_id}\n\n本批 ${members.length} 条；本模块当前待确认共 ${pending.length} 条；本批之后尚有 ${pending.length - members.length} 条待确认。\n\n${list}\n\n` +
-    "以上仅为待确认内容，不包含未采纳建议。本批全部同意可回复「确认好了」；需要修改请回复编号和修改内容，修改后重新展示清单。本次回复仅确认本批清单；其余条目需要另行展示和确认。技术方案、交付模式和风险处置仍单独审核。";
+    "以上仅为待确认内容，不包含未采纳建议。本批全部同意可回复「确认好了」；需要修改请回复编号和修改内容，修改后重新展示清单。本次回复仅确认本批清单；其余条目需要另行展示和确认。技术方案、交付模式和风险处置不在本模块普通条目清单内；收尾时可在合并确认清单中逐项列明后一起审核。";
   rejectSecrets(review_text);
   requireCondition(Buffer.byteLength(review_text, "utf8") <= 1024 * 1024, "REVIEW_TOO_LARGE");
   return {review, review_text};

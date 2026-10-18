@@ -4,8 +4,8 @@ import { z } from "zod";
 import { createHash, randomUUID } from "node:crypto";
 import { readPending, writeRecord, sessionPattern, moduleGrantBinding, withReviewLock, nativeInterruption } from "./adapter.ts";
 import { checkReviewDisplay } from "./display-check.ts";
-import { readSingle } from "./single.ts";
-import { fingerprint } from "../../packages/core/validation.ts";
+import { readSingle, clearReviewCommands, reviewCommandsHash } from "./single.ts";
+import { designScopeContext, isDesignScopeExit } from "./design-scope.ts";
 
 const eventSchema = z.object({hook_event_name: z.literal("UserPromptSubmit"),
   session_id: z.string().regex(sessionPattern), turn_id: z.string().regex(sessionPattern),
@@ -27,25 +27,34 @@ export function processUserPrompt(input: unknown, directory: string, sessionDire
   }
 }
 function processLockedPrompt(event: z.infer<typeof eventSchema>, directory: string, sessionDirectory: string) {
+  const pending = readPending(directory, event.session_id);
+  const single = readSingle(directory, event.session_id);
+  const scope = designScopeContext(event, directory, pending?.session_id === event.session_id || single?.session_id === event.session_id);
+  const review = processReviewPrompt(event, directory, sessionDirectory, pending, single);
+  // The genuine exit still revokes outstanding review grants above, but must
+  // not ask the user to regenerate an XMi list after choosing another task.
+  if (isDesignScopeExit(event.prompt)) return scope;
+  return [scope, review].filter(Boolean).join("\n");
+}
+function processReviewPrompt(event: z.infer<typeof eventSchema>, directory: string, sessionDirectory: string,
+  pending: ReturnType<typeof readPending>, single: ReturnType<typeof readSingle>) {
   writeRecord(directory, event.session_id + ".host", {session_id: event.session_id, event: event.hook_event_name});
   const routing = `XMi native session_id=${event.session_id}. For xmi_module_review_prepare/status/commit, pass this session_id as routing only; it is not approval. Do not ask the user for this internal identifier.`;
-  const pending = readPending(directory, event.session_id);
-  const singleRouting = routing + " For xmi_item_review_prepare/status/commit use the same session_id as routing only. Display the complete single-item list in chat; do not use a popup to confirm it.";
-  const single = readSingle(directory, event.session_id);
+  const singleRouting = routing + " For xmi_item_review_prepare/status/commit use the same session_id as routing only. At finalization collect known pending settings, option decisions, blueprints and risk dispositions into one numbered list using xmi_item_review_prepare requests; do not ask one by one. Display the complete list in chat; do not use a popup to confirm it.";
   if (single?.status === "PENDING") {
     if (pending && ["PENDING", "GRANTED"].includes(pending.status)) {
       writeRecord(directory, event.session_id, {...pending, status: "INVALIDATED"});
-      writeRecord(directory, event.session_id + ".single", {...single, command: null, status: "INVALIDATED"});
+      writeRecord(directory, event.session_id + ".single", {...clearReviewCommands(single), status: "INVALIDATED"});
       return singleRouting + "\nXMi 同时存在两份确认清单，均已失效；没有批准任何内容。重新展示唯一当前清单。";
     }
     const reply = event.prompt.trim();
     const finish = (status: "INVALIDATED" | "FAILED") => writeRecord(directory, event.session_id + ".single",
       {...single, command: null, status, turn_id: event.turn_id});
-    if (single.session_id !== event.session_id || !["确认好了", "确认好了。", "确认这条 " + single.review_id].includes(reply)) {
+    if (single.session_id !== event.session_id || !["确认好了", "确认好了。", "确认这条 " + single.review_id, "确认清单 " + single.review_id].includes(reply)) {
       finish("INVALIDATED");
-      return singleRouting + "\nXMi 上一份单条清单已失效；本次回复没有批准任何内容。按修改重新展示完整清单。";
+      return singleRouting + "\nXMi 上一份确认清单已失效；本次回复没有批准任何内容。按修改重新展示完整清单。";
     }
-    if (fingerprint(single.command) !== single.command_hash) {
+    if (reviewCommandsHash(single) !== single.command_hash) {
       finish("INVALIDATED");
       return singleRouting + "\nXMi 待执行内容与清单绑定不一致，没有写入。请重新核对当前完整内容。";
     }
@@ -54,7 +63,7 @@ function processLockedPrompt(event: z.infer<typeof eventSchema>, directory: stri
       display_check: {turn_id: event.turn_id, review_id: single.review_id, ...display}});
     if (!display.ok) {
       finish("INVALIDATED");
-      return singleRouting + "\nXMi 单条清单未能核验，没有写入。诊断码：" + display.reason + "; 保留原稿并检查实际日志交付，不要回退弹窗或反复要求确认。";
+      return singleRouting + "\nXMi 确认清单未能核验，没有写入。诊断码：" + display.reason + "; 保留原稿并检查实际日志交付，不要回退弹窗或反复要求确认。";
     }
     const source = {type: "owner_action" as const, ref: "codex-user-prompt:" + event.session_id + ":" + event.turn_id + ":" + createHash("sha256").update(reply).digest("hex")};
     writeRecord(directory, event.session_id + ".single", {...single, status: "GRANTED", turn_id: event.turn_id,

@@ -5,6 +5,9 @@ import {z} from "zod";
 import {commandSchema} from "../../packages/shared-types/domain.ts";
 import {sourceSchema} from "../../packages/shared-types/domain.ts";
 import type {ProjectService} from "../../packages/core/project-service.ts";
+import {previewOwnerAction} from "../../packages/core/project-service.ts";
+import {ownerReviewCommandSchema} from "../../packages/core/action-confirmation.ts";
+import {assessFeasibility} from "../../packages/core/solution-feasibility.ts";
 import type {Project, Command} from "../../packages/shared-types/domain.ts";
 import {requireCondition} from "../../packages/core/errors.ts";
 import {itemFingerprint, fingerprint, rejectSecrets} from "../../packages/core/validation.ts";
@@ -15,9 +18,9 @@ import {readPending, writeRecord, sessionPattern, withReviewLock, nativeInterrup
 
 export const singlePendingSchema = z.strictObject({session_id: z.string().regex(sessionPattern), db_path: z.string(),
   project_id: z.string(), project_version: z.number().int().positive(), review_id: z.string().uuid(),
-  review_heading: z.literal("## 单条确认清单\n"), review_text_hash: z.string().regex(/^[a-f0-9]{64}$/),
+  review_heading: z.enum(["## 单条确认清单\n", "## 收尾确认清单\n"]), review_text_hash: z.string().regex(/^[a-f0-9]{64}$/),
   review_text_length: z.number().int().positive().max(1024 * 1024), request_hash: z.string(), command_hash: z.string().regex(/^[a-f0-9]{64}$/),
-  action: z.enum(["PROPOSE", "APPROVE", "DELEGATE", "REJECT"]), actor: z.enum(["agent", "owner"]),
+  action: z.enum(["PROPOSE", "APPROVE", "DELEGATE", "REJECT", "BATCH"]), actor: z.enum(["agent", "owner"]),
   item_id: z.string(), item_version: z.number().int().nonnegative(), command: commandSchema.refine(command =>
     ["CANDIDATE_EXTRACTED", "ITEM_CONFIRMED", "ITEM_REJECTED", "DECISION_APPROVED", "SOLUTION_BLUEPRINT_APPROVED", "SOLUTION_BLUEPRINT_DELEGATED",
       "DELIVERY_MODE_SELECTED", "DELIVERY_MODE_UPGRADED", "MODE_OVERRIDE_RESOLVED", "MODE_OVERRIDE_RETRACTED"].includes(command.kind)).nullable(),
@@ -25,14 +28,22 @@ export const singlePendingSchema = z.strictObject({session_id: z.string().regex(
   grant_source_ref: sourceSchema.optional(),
   native_epoch: z.string().optional(), policy_review: z.boolean().optional(), applied_policy_hash: z.string().optional(),
   applied_version: z.number().int().positive().optional()});
+export const reviewRecordSchema = singlePendingSchema.extend({commands: z.array(ownerReviewCommandSchema).min(1).max(50).nullable().optional(),
+  applied_project_hash: z.string().regex(/^[a-f0-9]{64}$/u).optional()});
+export function reviewCommandsHash(record: z.infer<typeof reviewRecordSchema>) {return fingerprint(record.action === "BATCH" ? record.commands : record.command);}
+export function clearReviewCommands(record: z.infer<typeof reviewRecordSchema>) {
+  return {...record, command: null, ...(record.action === "BATCH" ? {commands: null} : {})};
+}
 export function readSingle(directory: string, session: string) {
   requireCondition(sessionPattern.test(session), "CHAT_CONFIRMATION_UNAVAILABLE");
   const path = join(directory, session + ".single.json");
   if (!existsSync(path)) return null;
   const text = readFileSync(path, "utf8");
   requireCondition(Buffer.byteLength(text, "utf8") <= 1024 * 1024, "INVALID_REVIEW_RECORD");
-  const record = singlePendingSchema.parse(JSON.parse(text));
-  requireCondition(!["PENDING", "GRANTED"].includes(record.status) || record.command !== null, "INVALID_REVIEW_RECORD");
+  const record = reviewRecordSchema.parse(JSON.parse(text));
+  requireCondition(record.action === "BATCH" ? record.command === null && record.actor === "owner" &&
+    (!["PENDING", "GRANTED"].includes(record.status) || !!record.commands?.length) :
+    !record.commands && (!["PENDING", "GRANTED"].includes(record.status) || record.command !== null), "INVALID_REVIEW_RECORD");
   if (["PENDING", "GRANTED"].includes(record.status) && record.command) {
     requireCondition(record.actor === (record.command.kind === "CANDIDATE_EXTRACTED" ? "agent" : "owner"), "INVALID_REVIEW_RECORD");
     const policy = ["DELIVERY_MODE_SELECTED", "DELIVERY_MODE_UPGRADED", "MODE_OVERRIDE_RESOLVED", "MODE_OVERRIDE_RETRACTED"].includes(record.command.kind);
@@ -41,24 +52,9 @@ export function readSingle(directory: string, session: string) {
   requireCondition(isAbsolute(record.db_path) && !record.db_path.startsWith("\\\\") && !record.db_path.startsWith("//"), "INVALID_REVIEW_RECORD");
   return record;
 }
-export function createSingleReviewRouter(directory: string, dbPath: string, launchSession?: string, service?: ProjectService) {
-  const resolve = (selected?: string) => {
-    const session = selected ?? launchSession;
-    requireCondition(session && sessionPattern.test(session), "CHAT_CONFIRMATION_SESSION_REQUIRED");
-    return session;
-  };
-  const ready = (session: string) => {
-    try {const marker = JSON.parse(readFileSync(join(directory, session + ".host.json"), "utf8"));
-      return marker.session_id === session && marker.event === "UserPromptSubmit";} catch {return false;}
-  };
-  return {
-    prepare(project: Project, raw: unknown, selected?: string) {
-      const session = resolve(selected);
-      return withReviewLock(directory, session, () => {
-      requireCondition(ready(session), "CHAT_CONFIRMATION_UNAVAILABLE");
+function buildAction(project: Project, raw: unknown) {
       const request = singleReviewRequest.parse(raw);
       requireCondition(project.project_id === request.project_id && project.model_version === request.expected_version, "VERSION_CONFLICT");
-      requireCondition(isAbsolute(dbPath) && !dbPath.startsWith("\\\\") && !dbPath.startsWith("//"), "CHAT_CONFIRMATION_UNAVAILABLE");
       const source = {type: "owner_action" as const, ref: "native-review-pending"};
       let command: Command, action: "PROPOSE" | "APPROVE" | "DELEGATE" | "REJECT", itemVersion: number;
       let content: string;
@@ -124,6 +120,66 @@ export function createSingleReviewRouter(directory: string, dbPath: string, laun
         }
       }
       rejectSecrets(command);
+
+      return {request, command, action, itemVersion, content, policyReview: policy.success};
+}
+
+export function createSingleReviewRouter(directory: string, dbPath: string, launchSession?: string, service?: ProjectService) {
+  const resolve = (selected?: string) => {
+    const session = selected ?? launchSession;
+    requireCondition(session && sessionPattern.test(session), "CHAT_CONFIRMATION_SESSION_REQUIRED");
+    return session;
+  };
+  const ready = (session: string) => {
+    try {const marker = JSON.parse(readFileSync(join(directory, session + ".host.json"), "utf8"));
+      return marker.session_id === session && marker.event === "UserPromptSubmit";} catch {return false;}
+  };
+  function prepareBatch(project: Project, rows: unknown[], session: string) {
+    requireCondition(rows.length > 0 && rows.length <= 50, "BATCH_REVIEW_SIZE_INVALID");
+    let preview = project; const commands: Command[] = [], sections: string[] = [], targets = new Set<string>();
+    for (const [index, raw] of rows.entries()) {
+      const original = singleReviewRequest.parse(raw);
+      requireCondition(original.project_id === project.project_id && original.expected_version === project.model_version, "VERSION_CONFLICT");
+      requireCondition(!original.project_directory, "BATCH_DIRECTORY_AT_TOP");
+      requireCondition(original.operation !== "xmi_patch_apply", "BATCH_ACTION_NOT_SUPPORTED");
+      const target = "item_id" in original ? "item:" + original.item_id : "override_id" in original ? "risk:" + original.override_id : "mode";
+      requireCondition(!targets.has(target), "BATCH_DUPLICATE_TARGET"); targets.add(target);
+      requireCondition(original.operation !== "xmi_delivery_mode_select" || index === 0, "BATCH_MODE_MUST_BE_FIRST");
+      const action = buildAction(preview, {...original, expected_version: preview.model_version});
+      ownerReviewCommandSchema.parse(action.command);
+      preview = previewOwnerAction(preview, action.command); commands.push(action.command);
+      sections.push(`### ${index + 1}. ${"item_id" in original ? original.item_id : "override_id" in original ? original.override_id : "交付模式"}\n\n` +
+        action.content.replace("风险处置、就绪评估和最终导出仍单独审核。", "本清单列出的风险处置一并审核；就绪校验及最终导出仍按原流程办理。"));
+    }
+    for (const command of commands) if (command.kind === "SOLUTION_BLUEPRINT_APPROVED" || command.kind === "SOLUTION_BLUEPRINT_DELEGATED") {
+      requireCondition(preview.items.find(i => i.id === command.item_id)?.blueprint_detail?.feasibility_fingerprint === assessFeasibility(preview).fingerprint,
+        "BATCH_BLUEPRINT_DEPENDENCY_CHANGED");
+    }
+    const requestHash = fingerprint({project_id: project.project_id, project_version: project.model_version, requests: rows});
+    const old = readSingle(directory, session), reviewId = old?.status === "PENDING" && old.request_hash === requestHash ? old.review_id : randomUUID();
+    const heading = "## 收尾确认清单\n" as const;
+    const text = heading + `清单编号：${reviewId}\n项目版本：${project.model_version}；本次 ${rows.length} 项，按以下顺序一次应用。\n\n` +
+      sections.join("\n\n---\n\n") + "\n\n以上只包含本次明确列出的操作，不代表其他未决事项已经解决。各项仍分别保留确认事件和来源；任一项失败则整批不写入。" +
+      "\n全部同意请一次回复“确认好了”；需要修改请回复编号和修改内容，修改后重新展示整份清单。不要逐条回复或重复点批准。最终文件导出另行授权。";
+    rejectSecrets(text); requireCondition(Buffer.byteLength(text, "utf8") <= 1024 * 1024, "REVIEW_TOO_LARGE");
+    const modulePending = readPending(directory, session);
+    if (modulePending && ["PENDING", "GRANTED"].includes(modulePending.status)) writeRecord(directory, session, {...modulePending, status: "INVALIDATED"});
+    writeRecord(directory, session + ".single", {session_id: session, db_path: dbPath, project_id: project.project_id,
+      project_version: project.model_version, review_id: reviewId, review_heading: heading,
+      review_text_hash: createHash("sha256").update(text).digest("hex"), review_text_length: text.length,
+      request_hash: requestHash, command_hash: fingerprint(commands), command: null, commands, action: "BATCH", actor: "owner",
+      item_id: "closing-review", item_version: 0, status: "PENDING"});
+    return {project_id: project.project_id, model_version: project.model_version, review_id: reviewId, review_text: text,
+      reply: "确认好了" as const, host_ready: true as const, action: "BATCH" as const};
+  }
+  return {
+    prepare(project: Project, raw: unknown, selected?: string) {
+      const session = resolve(selected);
+      return withReviewLock(directory, session, () => {
+      requireCondition(ready(session), "CHAT_CONFIRMATION_UNAVAILABLE");
+      requireCondition(isAbsolute(dbPath) && !dbPath.startsWith("\\\\") && !dbPath.startsWith("//"), "CHAT_CONFIRMATION_UNAVAILABLE");
+      if (Array.isArray(raw)) return prepareBatch(project, raw, session);
+      const {request, command, action, itemVersion, content, policyReview} = buildAction(project, raw);
       const requestHash = fingerprint(request);
       const old = readSingle(directory, session);
       const reviewId = old?.status === "PENDING" && old.request_hash === requestHash ? old.review_id : randomUUID();
@@ -136,7 +192,7 @@ export function createSingleReviewRouter(directory: string, dbPath: string, laun
       writeRecord(directory, session + ".single", {session_id: session, db_path: dbPath, project_id: project.project_id,
         project_version: project.model_version, review_id: reviewId, review_heading: "## 单条确认清单\n",
         review_text_hash: createHash("sha256").update(text).digest("hex"), review_text_length: text.length, request_hash: requestHash, command_hash: fingerprint(command),
-        action, actor: action === "PROPOSE" ? "agent" : "owner", policy_review: policy.success,
+        action, actor: action === "PROPOSE" ? "agent" : "owner", policy_review: policyReview,
         item_id: command.kind === "CANDIDATE_EXTRACTED" ? command.candidate.id : "item_id" in request ? request.item_id : "override_id" in request ? request.override_id : "delivery-policy",
         item_version: itemVersion, command, status: "PENDING"});
       return {project_id: project.project_id, model_version: project.model_version, review_id: reviewId, review_text: text,
@@ -148,7 +204,8 @@ export function createSingleReviewRouter(directory: string, dbPath: string, laun
       const matching = record?.db_path === dbPath && record.project_id === project.project_id;
       const item = matching ? project.items.find(item => item.id === record.item_id) : undefined;
       const stale = matching && ((["PENDING", "GRANTED"].includes(record.status) && record.project_version !== project.model_version) ||
-        (record.status === "APPLIED" && (record.policy_review ? record.applied_policy_hash !== fingerprint(project.delivery_policy) : !item || item.version !== record.item_version + 1)));
+        (record.status === "APPLIED" && (record.action === "BATCH" ? record.applied_project_hash !== fingerprint(project) :
+          record.policy_review ? record.applied_policy_hash !== fingerprint(project.delivery_policy) : !item || item.version !== record.item_version + 1)));
       return {project_id: project.project_id, model_version: project.model_version, host_ready: ready(session),
         review_id: matching ? record.review_id : null, status: matching ? stale ? "STALE" : record.status : "NONE",
         applied_version: matching ? record.applied_version ?? null : null};
@@ -164,24 +221,27 @@ export function createSingleReviewRouter(directory: string, dbPath: string, laun
         requireCondition(record.applied_version && record.applied_version <= project.model_version, "INVALID_REVIEW_RECORD");
         return {project_id:projectId,model_version:record.applied_version,next_action:"Already applied. Read canonical state; no new authority or write."};
       }
-      requireCondition(record.status === "GRANTED" && record.command && record.grant_source_ref?.type === "owner_action" && record.turn_id &&
+      requireCondition(record.status === "GRANTED" && (record.action === "BATCH" ? record.commands?.length : record.command) && record.grant_source_ref?.type === "owner_action" && record.turn_id &&
         record.grant_source_ref.ref.startsWith("codex-user-prompt:" + session + ":" + record.turn_id + ":"), "NATIVE_OWNER_REPLY_REQUIRED");
-      requireCondition(fingerprint(record.command) === record.command_hash, "FINGERPRINT_MISMATCH");
+      requireCondition(reviewCommandsHash(record) === record.command_hash, "FINGERPRINT_MISMATCH");
       const unchanged = () => requireCondition(record.native_epoch !== undefined &&
         record.native_epoch === nativeInterruption(directory, session), "NATIVE_OWNER_REPLY_EXPIRED");
       unchanged();
-      const source = record.grant_source_ref, command = record.command;
-      const authorized = "owner_action" in command ? {...command,owner_action:{...command.owner_action,source_ref:source}}
-        : command.kind === "CANDIDATE_EXTRACTED" ? {...command,candidate:{...command.candidate,source_refs:[...command.candidate.source_refs,source]}} : command;
+      const source = {type: "owner_action" as const, ref: record.grant_source_ref.ref}, command = record.command;
+      const authorized = command && "owner_action" in command ? {...command,owner_action:{...command.owner_action,source_ref:source}}
+        : command?.kind === "CANDIDATE_EXTRACTED" ? {...command,candidate:{...command.candidate,source_refs:[...command.candidate.source_refs,source]}} : command;
       let project: Project;
       try {
-        project = service.execute({project_id:projectId,expected_version:expectedVersion,idempotency_key:"chat-item-review:"+reviewId,command:authorized},record.actor,unchanged);
+        project = record.action === "BATCH" ? service.confirmActions({project_id: projectId, project_version: expectedVersion,
+          review_id: reviewId, commands: record.commands}, source, unchanged) :
+          service.execute({project_id:projectId,expected_version:expectedVersion,idempotency_key:"chat-item-review:"+reviewId,command:authorized},record.actor,unchanged);
       } catch (error) {
-        writeRecord(directory,session+".single",{...record,command:null,status:"FAILED"}); throw error;
+        if (record.action !== "BATCH") writeRecord(directory,session+".single",{...record,command:null,status:"FAILED"}); throw error;
       }
       // A sidecar failure after domain commit retains the existing GRANTED receipt.
       // Retrying the same binding recovers the domain receipt without another write.
-      writeRecord(directory,session+".single",{...record,command:null,status:"APPLIED",applied_version:project.model_version,
+      writeRecord(directory,session+".single",{...clearReviewCommands(record),status:"APPLIED",applied_version:project.model_version,
+        ...(record.action === "BATCH" ? {applied_project_hash: fingerprint(project)} : {}),
         ...(record.policy_review ? {applied_policy_hash:fingerprint(project.delivery_policy)} : {})});
       return {project_id:projectId,model_version:project.model_version,next_action:"Read canonical state to verify the exact operation. Saving a proposal remains PROPOSED; no readiness is granted."};
       });

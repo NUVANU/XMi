@@ -39,7 +39,7 @@ export function assessFeasibility(project: Project): FeasibilityAssessment {
     input("TARGET_USERS", hits(project, ["actor"]), "A confirmed target user/actor is required before solution selection."),
     input("CORE_FLOW", hits(project, ["flow"]), "A confirmed core flow is required before solution selection."),
     input("DATA_SENSITIVITY", hits(project, ["decision", "risk", "data_entity", "constraint", "solution_constraint"],
-      /sensitive|non[- ]?sensitive|private|public data|personal data|pii|regulated|敏感|非敏感|私有|公开数据|个人数据|监管/i,
+      /sensitive|non[- ]?sensitive|private|public data|personal data|pii|regulated|敏感|非敏感|私有|公开数据|个人数据|监管|(?:数据|资料|案例)(?:范围)?[：:\s]*(?:仅使用|只使用|仅采用|只采用|仅限于?|限定为|全部为|均为)[：:\s]*公开(?:的)?合成(?:数据|资料|案例)(?=[\s，,。；;]|$)/i,
       ["data-sensitivity"]), "Data sensitivity must be explicitly known."),
     input("LOCAL_CLOUD_REQUIREMENT", hits(project, ["decision", "constraint", "solution_constraint", "non_functional_requirement"],
       /local|cloud|on[- ]?device|browser[- ]?only|hosted|self[- ]?host|本地|云端|端侧|浏览器|托管|自托管/i,

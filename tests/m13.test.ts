@@ -27,6 +27,67 @@ function project(platform = "Support web browsers."): Project {
       item("PLATFORM-M13", platform, "non_functional_requirement", ["platform"])]};
 }
 
+test("M13 confirmed explicit public synthetic data scopes supply sensitivity evidence without tags", () => {
+  for (const statement of [
+    "首期评测资料仅使用公开合成案例，首次验证使用公开D0合成案例。",
+    "测试数据仅采用公开合成数据。",
+    "演示资料限定为公开的合成资料。",
+    "测试案例范围：仅限公开合成案例。",
+  ]) {
+    const p = project();
+    p.items[2] = item("DATA-SYNTHETIC", statement, "constraint");
+    const result = assessFeasibility(p);
+    assert.equal(result.satisfied_count, 8, statement);
+    assert.equal(result.total_count, 8);
+    assert.deepEqual(result.inputs.find(entry => entry.key === "DATA_SENSITIVITY")!.evidence_ids, ["DATA-SYNTHETIC"]);
+    const review = new SolutionService().review(p, source);
+    assert.equal(review.status, "PROPOSAL_AVAILABLE", statement);
+    assert.equal(review.proposed_patch!.candidate.status, "PROPOSED");
+    assert.equal(review.proposed_patch!.candidate.blueprint_detail!.owner_disposition, null);
+  }
+});
+
+test("M13 public synthetic scope never promotes unconfirmed or rejected evidence", () => {
+  for (const status of ["PROPOSED", "REJECTED", "SUPERSEDED", "INFERRED", "ASSUMED", "OPEN", "BLOCKING"] as const) {
+    const p = project();
+    p.items[2] = {...item("DATA-SYNTHETIC", "首期评测资料仅使用公开合成案例。", "constraint"), status};
+    const result = assessFeasibility(p);
+    assert.equal(result.satisfied_count, 7, status);
+    assert.deepEqual(result.inputs.find(entry => entry.key === "DATA_SENSITIVITY")!.evidence_ids, []);
+    assert.equal(new SolutionService().review(p, source).status, "BLOCKED_PREREQUISITES");
+  }
+});
+
+test("M13 vague synthetic mentions, non-scope text and undecided scope stay blocking", () => {
+  for (const statement of ["使用合成案例。", "演示资料仅使用合成资料。", "公开合成案例。",
+    "界面展示公开合成案例这几个字。", "评测资料是否仅使用公开合成案例？", "评测资料不只使用公开合成案例。",
+    "首期资料仅使用公开合成案例吗？"]) {
+    const p = project();
+    p.items[2] = item("DATA-SYNTHETIC", statement, "constraint");
+    assert.equal(assessFeasibility(p).satisfied_count, 7, statement);
+    assert.equal(new SolutionService().review(p, source).status, "BLOCKED_PREREQUISITES", statement);
+  }
+  const p = project();
+  p.items[2] = item("DATA-SYNTHETIC", "首期评测资料仅使用公开合成案例。", "functional_requirement");
+  assert.equal(assessFeasibility(p).satisfied_count, 7, "The existing allowed evidence types still apply.");
+});
+
+test("M13 public synthetic scope preserves the other prerequisites and risk gate", () => {
+  const p = project();
+  p.items[2] = item("DATA-SYNTHETIC", "首期评测资料仅使用公开合成案例。", "constraint");
+  p.items = p.items.filter(entry => entry.type !== "actor");
+  assert.equal(new SolutionService().review(p, source).status, "BLOCKED_PREREQUISITES");
+  p.items.push(item("ACTOR-M13", "Owners use the product.", "actor"));
+  p.delivery_policy!.requested_mode = "FAST_VALIDATION";
+  p.delivery_policy!.effective_mode = "FAST_VALIDATION";
+  p.delivery_policy!.readiness_target = "PROTOTYPE_READY";
+  p.items.push(item("PAYMENT-M13", "Users pay subscriptions through real payment processing.", "integration"));
+  const review = new SolutionService().review(p, source);
+  assert.equal(review.feasibility.satisfied_count, 8);
+  assert.equal(review.status, "BLOCKED_RISK");
+  assert.ok(review.risk_blocker_ids.length > 0);
+});
+
 test("M13 whole solutions differ by confirmed platform and retain unconfirmed status", () => {
   for (const [platform, expected] of [["Support web browsers.", "React"], ["Native Android mobile app.", "Kotlin"],
     ["Windows desktop only.", "Tauri"]]) {

@@ -356,13 +356,20 @@ test("M6 blueprint links deduplicate shared evidence without changing feasibilit
   assert.equal(candidate.blueprint_detail!.owner_disposition, null);
 });
 
-test("M6 blueprint links keep the existing twenty-distinct-link transport limit", () => {
+test("M6 blueprint links keep the approved finite transport limit without truncation", () => {
   const candidate = proposalCandidate(project([...completeItems(), ...multiInputConstraints()]));
   const request = {schema_version: "0.1.0", project_id: "XMI-M6-FIXTURE", expected_version: 20,
     idempotency_key: "m6-links-fixture", patch: {kind: "ADD_CANDIDATE", candidate}};
   assert.equal(inputs.xmi_patch_apply.safeParse(request).success, true);
+  for (const count of [21, 160]) {
+    const expanded = {...request, patch: {...request.patch,
+      candidate: {...candidate, links: Array.from({length: count}, (_, index) => `DISTINCT-LINK-${index}`)}}};
+    const parsed = inputs.xmi_patch_apply.safeParse(expanded);
+    assert.equal(parsed.success, true);
+    if (parsed.success) assert.deepEqual(parsed.data.patch.candidate.links, expanded.patch.candidate.links);
+  }
   const overLimit = {...request, patch: {...request.patch,
-    candidate: {...candidate, links: Array.from({length: 21}, (_, index) => `DISTINCT-LINK-${index}`)}}};
+    candidate: {...candidate, links: Array.from({length: 161}, (_, index) => `DISTINCT-LINK-${index}`)}}};
   const result = inputs.xmi_patch_apply.safeParse(overLimit);
   assert.equal(result.success, false);
   if (!result.success) assert.ok(result.error.issues.some((issue) =>

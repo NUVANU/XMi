@@ -88,7 +88,7 @@ export const WEB_MICRO_SAAS_V0_RULES: readonly ProfileRule[] = [
   r("commercial.subscription", "COMMERCIAL", "subscription start/change/cancel", "FAST_DEVELOPMENT", "COMMERCIAL",
     ["functional_requirement", "flow", "decision"], ["subscription"], ["subscription", "plan", "cancel", "订阅", "套餐", "取消"]),
   r("commercial.payment-failure", "COMMERCIAL", "payment failure", "FAST_DEVELOPMENT", "COMMERCIAL",
-    ["functional_requirement", "acceptance_criterion"], ["payment-failure"], ["payment fail", "card declined", "支付失败", "扣款失败"]),
+    ["functional_requirement", "acceptance_criterion", "decision"], ["payment-failure"], ["payment fail", "card declined", "billing fail", "charge fail", "支付失败", "扣款失败", "付款失败"]),
   r("commercial.refund-support", "COMMERCIAL", "refund/support policy as product behavior", "PRODUCT_GRADE", "COMMERCIAL",
     ["decision", "functional_requirement"], ["refund"], ["refund", "chargeback", "退款", "退费"]),
   r("commercial.usage-limits", "COMMERCIAL", "usage limits", "FAST_DEVELOPMENT", "COMMERCIAL",
@@ -116,7 +116,7 @@ export const WEB_MICRO_SAAS_V0_RULES: readonly ProfileRule[] = [
   r("security.deletion-export", "SECURITY_PRIVACY", "deletion/export", "FAST_DEVELOPMENT", "ALWAYS",
     ["functional_requirement", "decision", "data_entity"], ["deletion", "export"], ["delete", "export", "删除", "导出"]),
   r("security.regulated-risk", "SECURITY_PRIVACY", "regulated/high-risk data flags", "FAST_VALIDATION", "ALWAYS",
-    ["risk", "decision", "constraint"], ["regulated", "high-risk"], ["regulated", "medical", "health", "biometric", "监管", "医疗", "健康", "生物识别"]),
+    ["risk", "decision", "constraint", "exclusion"], ["regulated", "high-risk"], ["regulated", "medical", "health", "biometric", "监管", "医疗", "健康", "生物识别"]),
 
   r("nfr.devices-browsers", "NON_FUNCTIONAL", "supported devices/browsers", "FAST_DEVELOPMENT", "ALWAYS",
     ["non_functional_requirement", "constraint"], ["device", "browser"], ["browser", "mobile", "desktop", "device", "浏览器", "移动端", "桌面"]),

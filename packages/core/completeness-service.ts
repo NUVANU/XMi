@@ -5,6 +5,7 @@ import type { ApplicabilityKey, ProfileArea, ProfileRule } from "./profile-rules
 import { riskContext, unsafeExclusionItems } from "./risk-context.ts";
 import { assessFeasibility } from "./solution-feasibility.ts";
 import { solutionBlockingInputs } from "./solution-options.ts";
+import { paymentScope } from "./payment-scope.ts";
 
 const ranks: Record<DeliveryMode, number> = {FAST_VALIDATION: 0, FAST_DEVELOPMENT: 1, PRODUCT_GRADE: 2};
 const targets: Record<DeliveryMode, "PROTOTYPE_READY" | "BUILD_READY" | "PRODUCT_SPEC_READY"> = {
@@ -133,15 +134,34 @@ function evidence(project: Project, rule: ProfileRule): Item[] {
   const tags = words(rule.evidence_tags); const keywords = words(rule.evidence_keywords);
   return project.items.filter(active).filter((item) => {
     const body = text(item);
+    if (rule.id === "security.data-sensitivity" && item.status === "CONFIRMED" && rule.evidence_types.includes(item.type) &&
+      item.statement.split(/[。；;\n]/u).some(clause => !/[?？]|是否|待定/u.test(clause) &&
+        /^(?:首期|本期|当前|V0)?(?:评测)?(?:数据|资料|案例)(?:范围)?[：:\s]*(?:仅使用|只使用|仅采用|只采用|仅限于?|限定为|全部为|均为)[：:\s]*公开(?:的)?合成(?:数据|资料|案例)(?=[\s，,]|$)/iu.test(clause.trim()))) return true;
+    if (rule.id === "security.regulated-risk" && item.type === "exclusion") return item.status === "CONFIRMED" &&
+      !/[?？]|是否|待定|不(?:再)?(?:排除|后置|延期)|未(?:排除|后置|延期)/u.test(item.statement) && /后置|延期|排除|不接入|\b(?:deferred|excluded)\b/i.test(item.statement) &&
+      /医疗|生物识别|个人健康|监管资料|\b(?:medical|biometric|regulated data|personal health)\b/i.test(item.statement);
+    if (rule.id === "integration.external-data" && rule.evidence_types.includes(item.type) &&
+      item.statement.split(/[。；;\n]/u).some(sentence =>
+        !/[?？]|是否|待定/u.test(sentence) && sentence.split(/[，,]/u).some(clause =>
+          !/(?:不|未|禁止|无需)[^，,。；;\n]{0,24}(?:发送|外发)/u.test(clause) &&
+          /(?:数据|资料|证据|文本)[^，,。；;\n]{0,24}发送(?:到|至)[^，,。；;\n]{0,40}(?:\bAPI\b|接口)/iu.test(clause)))) return true;
     return rule.evidence_types.includes(item.type) && (tags.some((tag) => item.tags?.map((t) => t.toLowerCase()).includes(tag)) ||
       keywords.some((keyword) => body.includes(keyword)));
   });
 }
 function ruleResults(project: Project): ProfileRuleResult[] {
   const rules = project.profile === "digital-game-v0" ? DIGITAL_GAME_V0_RULES : WEB_MICRO_SAAS_V0_RULES;
+  const payment = paymentScope(project, isRiskScopeDeferred(project, "PAYMENT_OR_FINANCIAL"));
   return rules.map((rule) => {
-    const app = rule.id === "commercial.payment-failure" && isRiskScopeDeferred(project, "PAYMENT_OR_FINANCIAL")
-      ? "NOT_APPLICABLE" as const : applicability(project, rule.applicability).value;
+    if (rule.id === "commercial.payment-failure") {
+      const app = payment.not_applicable ? "NOT_APPLICABLE" : payment.conflict ? "UNRESOLVED" :
+        payment.current_ids.length ? "APPLICABLE" : applicability(project, rule.applicability).value;
+      return {rule_id: rule.id, area: rule.area, label: rule.label, minimum_mode: rule.minimum_mode,
+        applicability: app as Applicability, considered: payment.not_applicable || payment.failure_ids.length > 0,
+        confirmed: payment.not_applicable || !payment.conflict && payment.failure_ids.length > 0,
+        evidence_ids: payment.not_applicable || payment.conflict ? [...payment.exclusion_ids, ...payment.current_ids] : payment.failure_ids};
+    }
+    const app = applicability(project, rule.applicability).value;
     const hits = app === "NOT_APPLICABLE" ? [] : evidence(project, rule);
     return {rule_id: rule.id, area: rule.area, label: rule.label, minimum_mode: rule.minimum_mode,
       applicability: app, considered: app === "NOT_APPLICABLE" || hits.length > 0,
@@ -171,10 +191,14 @@ function classificationBlockers(project: Project): CompletenessBlocker[] {
 }
 function profileBlockers(project: Project, results: ProfileRuleResult[]): CompletenessBlocker[] {
   const required = requiredResults(project, results);
-  return required.filter((result) => result.applicability === "APPLICABLE" && !result.considered).map((result) => ({
+  const payment = paymentScope(project, isRiskScopeDeferred(project, "PAYMENT_OR_FINANCIAL"));
+  const conflicts: CompletenessBlocker[] = payment.conflict ? [{id: "BLOCK-PROFILE-PAYMENT-SCOPE-CONFLICT", category: "PROFILE",
+    reason: "Current payment behavior conflicts with a confirmed real-payment exclusion; Owner resolution is required.",
+    affected_ids: [...payment.exclusion_ids, ...payment.current_ids]}] : [];
+  return [...conflicts, ...required.filter((result) => result.applicability === "APPLICABLE" && !result.considered).map((result) => ({
     id: `BLOCK-PROFILE-${result.rule_id.toUpperCase().replace(/[^A-Z0-9]+/g, "-")}`,
     category: "PROFILE" as const, reason: `Required profile area has not been considered: ${result.label}.`, affected_ids: [],
-  }));
+  }))];
 }
 function decisionBlockers(project: Project): CompletenessBlocker[] {
   return project.items.filter(active).filter((item) => item.type === "decision" && item.tags?.includes("material"))

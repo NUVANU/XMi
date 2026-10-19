@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { DeliveryMode, Project } from "../shared-types/domain.ts";
 import { fingerprint } from "./validation.ts";
+import {specReviewRunSchema} from "./spec-review-service.ts";
 
 const hash = z.string().regex(/^[a-f0-9]{64}$/);
 const projectId = z.string().regex(/^XMI-[A-Z0-9-]+$/);
@@ -37,6 +38,17 @@ export const independentReviewEvidenceSchema = z.strictObject({
   canonical_state_mutated: z.literal(false),
 });
 export type IndependentReviewEvidence = z.infer<typeof independentReviewEvidenceSchema>;
+
+// Phase 1 never trusts author-supplied M11 JSON, test output or isolation flags.
+// Keep the historical M11 shape checker separate from this runtime decision.
+export function assessPhaseOneIndependentReview(project: Project, value: unknown): {eligible: false; reason: string} {
+  const parsed = specReviewRunSchema.safeParse(value);
+  if (!parsed.success) return {eligible: false, reason: "SPEC_REVIEW_SOURCE_UNVERIFIED"};
+  if (parsed.data.project_id !== project.project_id || parsed.data.product_model_version !== project.model_version)
+    return {eligible: false, reason: "SPEC_REVIEW_STALE"};
+  return {eligible: false, reason: parsed.data.execution_kind === "HOST_AGENT"
+    ? "SPEC_REVIEW_HOST_ISOLATION_NOT_VERIFIED" : "SPEC_REVIEW_TEST_ONLY_NOT_ELIGIBLE"};
+}
 
 const hostMutation = z.enum([
   "xmi_project_create",

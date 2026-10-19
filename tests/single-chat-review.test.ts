@@ -8,7 +8,8 @@ import {tmpdir} from "node:os";
 import {join, toNamespacedPath} from "node:path";
 import {Client} from "@modelcontextprotocol/sdk/client/index.js";
 import {InMemoryTransport} from "@modelcontextprotocol/sdk/inMemory.js";
-import {createXmiServer} from "../apps/mcp-server/server.ts";
+import {createXmiServer, toolDescriptors} from "../apps/mcp-server/server.ts";
+import {Ajv2020} from "ajv/dist/2020.js";
 import {inputs, outputs} from "../apps/mcp-server/contracts.ts";
 import {createSingleReviewRouter, readSingle} from "../apps/local-module-review/single.ts";
 import {createModuleReviewHost, readPending, writeRecord} from "../apps/local-module-review/adapter.ts";
@@ -67,7 +68,7 @@ function fixture(t: TestContext) {
   return {directory,db,log,store,service,p,router,prompt,display,args,commit};
 }
 
-function seedBlueprint(f: ReturnType<typeof fixture>): {project: Project; candidate: Candidate} {
+function seedBlueprint(f: ReturnType<typeof fixture>, copies = 1): {project: Project; candidate: Candidate} {
   let p = f.service.get(f.p.project_id);
   const reason = "fixture controlled MVP";
   p = f.service.execute({project_id:p.project_id, expected_version:p.model_version, idempotency_key:"mode",
@@ -83,7 +84,7 @@ function seedBlueprint(f: ReturnType<typeof fixture>): {project: Project; candid
     ["non_functional_requirement","Prefer low operating cost and low maintenance burden","cost"],
     ["non_functional_requirement","Support modern desktop and mobile web browsers","platform"],
   ] as const;
-  for (const [index, row] of rows.entries()) {
+  for (const [index, row] of Array.from({length:copies},()=>rows).flat().entries()) {
     const candidate = {id:"REQ-SEED-"+index,type:row[0],statement:row[1],status:"PROPOSED" as const,source_refs:[source],tags:[row[2]]};
     p = f.service.execute({project_id:p.project_id,expected_version:p.model_version,idempotency_key:"add"+index,command:{kind:"CANDIDATE_EXTRACTED",candidate}});
     const item = p.items.find(item=>item.id===candidate.id)!;
@@ -93,6 +94,80 @@ function seedBlueprint(f: ReturnType<typeof fixture>): {project: Project; candid
   const candidate = new SolutionService().review(p, {type:"system_rule",ref:"fixture:solution"}).proposed_patch!.candidate;
   return {project:p,candidate};
 }
+
+test("blueprint link bounds agree across MCP input, output and native review metadata", async t => {
+  const f=fixture(t), seeded=seedBlueprint(f);
+  const server=createXmiServer(f.service,{singleReview:f.router});
+  const client=new Client({name:"blueprint-boundary-fixture",version:"1"},{capabilities:{}});
+  const [a,b]=InMemoryTransport.createLinkedPair(); await server.connect(a); await client.connect(b);
+  t.after(async()=>{await client.close();await server.close();});
+  const response=await client.callTool({name:"xmi_project_resume",arguments:{schema_version:"0.1.0",project_id:seeded.project.project_id}});
+  const envelope=response.structuredContent as {ok:boolean;data:{solution_review:{proposed_patch:{candidate:Candidate}}}};
+  assert.equal(envelope.ok,true);
+  const ajv=new Ajv2020({strict:false});
+  const descriptor=(name:string)=>toolDescriptors.find(tool=>tool.name===name)!;
+  const patchValidator=ajv.compile(descriptor("xmi_patch_apply").inputSchema);
+  const nativeValidator=ajv.compile(descriptor("xmi_item_review_prepare").inputSchema);
+  const resumeValidator=ajv.compile(descriptor("xmi_project_resume").outputSchema!);
+  for(const [type,count,valid] of [["solution_blueprint",24,true],["solution_blueprint",160,true],["solution_blueprint",161,false],
+    ["constraint",20,true],["constraint",21,false],["constraint",160,false]] as const) {
+    const candidate:Candidate={...seeded.candidate,type,links:Array.from({length:count},(_,i)=>"REQ-BOUND-"+i)};
+    if(type!=="solution_blueprint")delete candidate.blueprint_detail;
+    const patch={schema_version:"0.1.0",project_id:seeded.project.project_id,expected_version:seeded.project.model_version,
+      idempotency_key:"bound",patch:{kind:"ADD_CANDIDATE",candidate}};
+    const native={schema_version:"0.1.0",session_id:session,request:{...patch,operation:"xmi_patch_apply"}};
+    const output=structuredClone(envelope);output.data.solution_review.proposed_patch.candidate=candidate;
+    const label=type+":"+count;
+    assert.equal(inputs.xmi_patch_apply.safeParse(patch).success,valid,label);
+    assert.equal(inputs.xmi_item_review_prepare.safeParse(native).success,valid,label);
+    assert.equal(outputs.xmi_project_resume.safeParse(output).success,valid,label);
+    assert.equal(patchValidator(patch),valid,label);
+    assert.equal(nativeValidator(native),valid,label);
+    assert.equal(resumeValidator(output),valid,label);
+    if(!valid) {
+      assert.throws(()=>f.router.prepare(seeded.project,native.request,session));
+      assert.equal(readSingle(f.directory,session),null,"Invalid capacity must not stage a review.");
+    }
+  }
+});
+
+test("24 unique blueprint links survive resume, native proposal save and separate stale-checked adoption", async t => {
+  const f=fixture(t), seeded=seedBlueprint(f,3);
+  assert.equal(seeded.candidate.links!.length,24);
+  const server=createXmiServer(f.service,{singleReview:f.router});
+  const client=new Client({name:"blueprint-24-fixture",version:"1"},{capabilities:{}});
+  const [a,b]=InMemoryTransport.createLinkedPair(); await server.connect(a); await client.connect(b);
+  t.after(async()=>{await client.close();await server.close();});
+  const resumed=await client.callTool({name:"xmi_project_resume",arguments:{schema_version:"0.1.0",project_id:seeded.project.project_id}});
+  assert.equal(outputs.xmi_project_resume.safeParse(resumed.structuredContent).success,true);
+  const data=resumed.structuredContent as {ok:boolean;data:{solution_review:{proposed_patch:{candidate:Candidate}}}};
+  assert.equal(data.ok,true);
+  const candidate=data.data.solution_review.proposed_patch.candidate;
+  assert.deepEqual(candidate.links,seeded.candidate.links);
+  const request={operation:"xmi_patch_apply",schema_version:"0.1.0",project_id:seeded.project.project_id,expected_version:seeded.project.model_version,
+    idempotency_key:"save-plan-24",patch:{kind:"ADD_CANDIDATE",candidate}};
+  const prepared=await client.callTool({name:"xmi_item_review_prepare",arguments:{schema_version:"0.1.0",session_id:session,request}});
+  assert.equal(outputs.xmi_item_review_prepare.safeParse(prepared.structuredContent).success,true);
+  const review=prepared.structuredContent as {ok:boolean;data:{review_text:string}};
+  assert.equal(review.ok,true);
+  assert.ok(review.data.review_text.includes(quotedReviewText(candidate.links!.join("、"))));
+  assert.throws(()=>f.commit(),/NATIVE_OWNER_REPLY_REQUIRED/);
+  assert.equal(f.service.get(seeded.project.project_id).model_version,seeded.project.model_version);
+  f.display(review.data.review_text);f.prompt("确认好了");f.commit();
+  let p=f.service.get(seeded.project.project_id), saved=p.items.find(item=>item.id===candidate.id)!;
+  assert.equal(saved.status,"PROPOSED");assert.equal(saved.blueprint_detail!.owner_disposition,null);
+  assert.deepEqual(saved.links,candidate.links);
+  const approval=f.router.prepare(p,{...f.args(p,saved.id),solution_disposition:"APPROVE_BLUEPRINT"},session);
+  p=f.service.execute({project_id:p.project_id,expected_version:p.model_version,idempotency_key:"intervening-draft",
+    command:{kind:"CANDIDATE_EXTRACTED",candidate:{id:"REQ-INTERVENING",type:"constraint",statement:"Unconfirmed later note.",status:"PROPOSED",source_refs:[source]}}});
+  f.display(approval.review_text);f.prompt("确认好了");assert.throws(()=>f.commit(),/VERSION_CONFLICT/);
+  const fresh=f.router.prepare(p,{...f.args(p,saved.id),solution_disposition:"APPROVE_BLUEPRINT"},session);
+  assert.ok(fresh.review_text.includes(quotedReviewText(candidate.links!.join("、"))));
+  f.display(fresh.review_text);f.prompt("确认好了");f.commit();
+  p=f.service.get(p.project_id);saved=p.items.find(item=>item.id===candidate.id)!;
+  assert.equal(saved.status,"CONFIRMED");assert.equal(saved.blueprint_detail!.owner_disposition,"APPROVED");
+  assert.deepEqual(saved.links,candidate.links);
+});
 
 test("single list prepares without adoption and native text confirms exactly one item with provenance", t => {
   const f = fixture(t), prepared = f.router.prepare(f.p, f.args(), session);

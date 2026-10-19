@@ -17,7 +17,7 @@ async function connect(form=false) {
   clients.push(client);await client.connect(new StdioClientTransport({command:process.execPath,args,stderr:'pipe'}));return client;
 }
 try {
-  const fixture={schema_version:'0.1.0',title:'Synthetic self-check',initial_idea:'A local synthetic notes tool for package verification.',source_ref:{type:'conversation_turn',ref:'fixture:public-package'},idempotency_key:'fixture-create'};
+  const fixture={schema_version:'0.1.0',project_directory:join(temp,'project'),title:'Synthetic self-check',initial_idea:'A local synthetic notes tool for package verification.',source_ref:{type:'conversation_turn',ref:'fixture:public-package'},idempotency_key:'fixture-create'};
   const plain=await connect();assert.equal((await plain.listTools()).tools.length,26);
   assert.equal((await call(plain,'xmi_project_create',fixture)).error.code,'CONSENT_UNAVAILABLE');await plain.close();
   const client=await connect(true),created=await call(client,'xmi_project_create',fixture);assert.equal(created.ok,true);
@@ -27,5 +27,5 @@ try {
   assert.equal((await call(client,'xmi_module_review_status',route)).error.code,'CHAT_CONFIRMATION_UNAVAILABLE');
   const ready=await call(client,'xmi_readiness_evaluate',{...route,expected_version:after.data.model_version});assert.equal(ready.ok,true);assert.equal(ready.data.readiness.hard_gate_ready,false);
   await client.close();const restored=await connect(true);assert.equal((await call(restored,'xmi_project_get',route)).data.model_version,after.data.model_version);
-  console.log(JSON.stringify({status:'PASS',checks:['26 tools','no-form refusal','synthetic form create/adopt/readback','native bridge unavailable in generic host','readiness blockers preserved','restart continuity'],scope:'Isolated temporary fixture only; does not prove any host UI or human acceptance.'}));
+  console.log(JSON.stringify({status:'PASS',checks:['26 default tools; independent-review prototype deferred','no-form refusal','synthetic form create/adopt/readback','native bridge unavailable in generic host','readiness blockers preserved','restart continuity'],scope:'Isolated temporary fixture only; does not prove any host UI or human acceptance.'}));
 } finally {await Promise.allSettled(clients.map(client=>client.close()));rmSync(temp,{recursive:true,force:true});}

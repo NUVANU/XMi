@@ -9,6 +9,7 @@ import { evaluateRisk, evaluateRiskLegacy, exclusionScopeIssues, riskResolutionR
 import { assessFeasibility } from "./solution-feasibility.ts";
 import { solutionBlockingInputs } from "./solution-options.ts";
 import { moduleConfirmationSchema } from "./module-confirmation.ts";
+import {actionConfirmationSchema, ownerReviewCommandSchema} from "./action-confirmation.ts";
 
 const targets = { FAST_VALIDATION: "PROTOTYPE_READY", FAST_DEVELOPMENT: "BUILD_READY",
   PRODUCT_GRADE: "PRODUCT_SPEC_READY" } as const;
@@ -234,6 +235,15 @@ export function replay(rawEvents: DomainEvent[]): Project {
   return project!;
 }
 
+/** Hypothetical validation only; no events, receipts or Owner authority are saved. */
+export function previewOwnerAction(project: Project, input: unknown): Project {
+  const command = ownerReviewCommandSchema.parse(input);
+  const versioned = command.kind === "MODE_OVERRIDE_RESOLVED" || command.kind === "SOLUTION_BLUEPRINT_APPROVED" || command.kind === "SOLUTION_BLUEPRINT_DELEGATED"
+    ? {...command, risk_revision: 2 as const} : command;
+  return transition(project, {event_id: "EVENT-PREVIEW", project_id: project.project_id, version: project.model_version + 1,
+    actor: "owner", occurred_at: project.updated_at, command: versioned, previous_hash: ""});
+}
+
 export class ProjectService {
   private store: ProjectStore;
   private clock: () => string;
@@ -321,6 +331,47 @@ export class ProjectService {
       }
       beforeCommit?.();
       return next;
+    });
+  }
+
+  confirmActions(input: unknown, sourceRef: {type: "owner_action"; ref: string}, beforeCommit: () => void): Project {
+    const review = actionConfirmationSchema.parse(input);
+    return this.store.transaction(tx => {
+      const requests = review.commands.map((command, index) => {
+        requireCondition("owner_action" in command, "OWNER_ACTION_REQUIRED");
+        const authorized = commandSchema.parse({...command, owner_action: {...command.owner_action, source_ref: sourceRef}});
+        const versioned = authorized.kind === "MODE_OVERRIDE_RESOLVED" || authorized.kind === "SOLUTION_BLUEPRINT_APPROVED" || authorized.kind === "SOLUTION_BLUEPRINT_DELEGATED"
+          ? {...authorized, risk_revision: 2 as const} : authorized;
+        return {project_id: review.project_id, expected_version: review.project_version + index,
+          idempotency_key: "chat-action-review:" + review.review_id + ":" + index, command: versioned};
+      });
+      const receipts = requests.map(request => tx.receipt(request.project_id + ":" + request.idempotency_key));
+      if (receipts.some(Boolean)) {
+        requireCondition(receipts.every(Boolean), "CORRUPT_RECEIPT");
+        const events = tx.events(review.project_id), byVersion = new Map(events.map(event => [event.version, event]));
+        for (const [index, request] of requests.entries()) {
+          const receipt = receipts[index]!, event = byVersion.get(request.expected_version + 1);
+          requireCondition(receipt.request_hash === fingerprint({...request, actor: "owner"}) && receipt.project_id === review.project_id &&
+            receipt.version === request.expected_version + 1 && event?.actor === "owner" &&
+            fingerprint(event.command) === fingerprint(request.command), "CORRUPT_RECEIPT");
+        }
+        // Validate the frozen result once, rather than replaying a long history
+        // for every row after a sidecar failure. Later state is checked separately.
+        const result = this.retry(tx, receipts.at(-1)!, fingerprint({...requests.at(-1)!, actor: "owner"}));
+        const current = events.at(-1)!.version === result.model_version ? result : replay(events);
+        requireCondition(fingerprint(tx.snapshot(review.project_id)) === fingerprint(current), "CORRUPT_SNAPSHOT");
+        beforeCommit(); return result;
+      }
+      const events = tx.events(review.project_id), project = replay(events);
+      requireCondition(project.model_version === review.project_version, "VERSION_CONFLICT");
+      requireCondition(fingerprint(tx.snapshot(review.project_id)) === fingerprint(project), "CORRUPT_SNAPSHOT");
+      const validated = {project, lastHash: events.at(-1)!.hash};
+      for (const request of requests) {
+        rejectSecrets(request.command);
+        this.persist(tx, request.project_id, request.expected_version, request.project_id + ":" + request.idempotency_key,
+          request.command, "owner", fingerprint({...request, actor: "owner"}), validated);
+      }
+      beforeCommit(); return structuredClone(validated.project);
     });
   }
 

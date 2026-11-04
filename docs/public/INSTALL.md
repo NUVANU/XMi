@@ -1,4 +1,4 @@
-# 安装 XMi Alpha
+# 安装 XMi V0.1
 
 完整解压到长期保留的位置，或克隆公开源码。准备 Node 24.20.0 / npm 11.19.0，执行 `npm ci --omit=dev --ignore-scripts`、`npm run check`。本包不静默安装运行环境或修改信任记录。
 

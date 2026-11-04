@@ -1,4 +1,4 @@
-# XMi private developer-mode package
+# XMi V0.1 Codex plugin
 
 2026-10-16 补充：按用户要求加入可选的本机 Codex 宿主新 Agent 规格内容评审。沿用既有模型登录和模块确认流程；原生来源核对不等于强制权限隔离，也不自动通过正式就绪门槛。普通采访及有效候选包导出不要求执行评审。见 [ADR-022](../../docs/adr/ADR-022-NATIVE-HOST-AGENT-SPEC-REVIEW.md)。
 

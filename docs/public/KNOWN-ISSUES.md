@@ -1,4 +1,4 @@
-# Alpha known issues
+# XMi V0.1 已知问题
 
 ADR-019 removes the raw JSON fallback and extends native chat review to mode/risk operations. Generic desktop forms use lossless bounded pages; cloud retains authenticated page review. An already-open old dialog or loaded old MCP process requires cancellation/reload. Actual desktop Owner confirmation is an acceptance check, not a result established by isolated tests. Historical ZIPs predate this correction; this public source contains it.
 

@@ -154,7 +154,7 @@ test("M12 module arguments reject empty or oversized names and leave legacy call
   assert.equal(inputs.xmi_project_resume.safeParse(args).success, true);
 });
 
-test("M12 pending overview is bounded independently of the Owner's active-decision maximum", () => {
+test("M12 pending overview respects the Owner's decision limit and reports remaining decisions", () => {
   const {store, service, projectId} = fixture();
   const p = service.get(projectId);
   for (let index = 0; index < 10; index++) p.items.push({id: "DEC-" + index, type: "decision", statement: "需要讨论的规则 " + index,
@@ -162,7 +162,9 @@ test("M12 pending overview is bounded independently of the Owner's active-decisi
     version: 1, created_at: now, updated_at: now});
   const view = new InterviewService().moduleReview(p, "技能设计", 1)!;
   assert.equal(view.review_brief.decision_limit, 1);
-  assert.equal(view.pending_decisions.length, 8);
+  assert.equal(view.pending_decisions.length, 1);
+  assert.equal(view.displayed_pending_decisions, 1);
+  assert.equal(view.remaining_pending_decisions, 9);
   assert.equal(view.total_pending_decisions, 10);
   assert.equal(view.pending_decisions_truncated, true);
   assert.equal(view.review_brief.recommendations_status, "UNADOPTED");

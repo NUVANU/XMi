@@ -243,4 +243,3 @@ test("D4: absent recorded choices stay unavailable and long question previews re
   const open = brief.pending_decisions.find(row => row.id === "CON-OPEN")!;
   assert.deepEqual(open.options, []); assert.equal(open.recommendation, null); assert.equal(open.why_it_matters, null);
 });
-

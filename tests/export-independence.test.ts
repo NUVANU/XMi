@@ -97,7 +97,8 @@ function reseal(xspec: XSpecDocument): void {
   delete copy.integrity;
   xspec.integrity.canonical_sha256 = fingerprint(copy);
 }
-function mutateArtifact(artifact: CompiledArtifact, mutate: (xspec: XSpecDocument) => void): CompiledArtifact {
+function mutateArtifact(artifact: CompiledArtifact, mutate: (xspec: XSpecDocument) => void,
+  options: {legacyManifest?: boolean} = {}): CompiledArtifact {
   const clone = structuredClone(artifact);
   const xfile = clone.files.find((file) => file.path === "xspec.json")!;
   const xspec = JSON.parse(xfile.content) as XSpecDocument;
@@ -105,7 +106,8 @@ function mutateArtifact(artifact: CompiledArtifact, mutate: (xspec: XSpecDocumen
   xfile.content = JSON.stringify(xspec, null, 2) + "\n";
   xfile.sha256 = sha256(xfile.content);
   const manifestFile = clone.files.find((file) => file.path === "manifest.json")!;
-  const manifest = JSON.parse(manifestFile.content) as {file_sha256: Record<string, string>; canonical_xspec_sha256: string};
+  const manifest = JSON.parse(manifestFile.content) as {file_sha256: Record<string, string>; canonical_xspec_sha256: string; producer_evidence?: unknown};
+  if (options.legacyManifest) delete manifest.producer_evidence;
   manifest.file_sha256["xspec.json"] = xfile.sha256;
   manifest.canonical_xspec_sha256 = xspec.integrity.canonical_sha256;
   manifestFile.content = JSON.stringify(manifest, null, 2) + "\n";
@@ -205,12 +207,13 @@ test("a scope-override floor below the project mode is normalised at export and 
 });
 
 test("a consumer-only failure does not make the package invalid, and readiness stays honest", () => {
-  // Feed a below-floor override through the consumer by mutation, bypassing the projection.
+  // A legacy manifest has no producer evidence to bind to the original compiled body.
+  // Mutate that legacy artifact to exercise only the consumer's below-floor rejection.
   const p = withOverride(projectFixture("FAST_DEVELOPMENT"), "UPGRADE_SCOPE", "PRODUCT_GRADE");
   const artifact = mutateArtifact(xspecs.compile(p), (x) => {
     (x.delivery_profile as {scope_overrides: Array<{minimum_mode: string}>}).scope_overrides[0]!.minimum_mode = "FAST_VALIDATION";
     reseal(x);
-  });
+  }, {legacyManifest: true});
   const validation = xspecs.validate(p, artifact);
   assert.equal(validation.package_valid, true, "the artifact itself is sound");
   assert.equal(validation.valid, false, "full validity still accounts for consumer disposition");

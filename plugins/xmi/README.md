@@ -1,4 +1,4 @@
-# XMi private developer-mode package
+# XMi V0.1 Codex plugin
 
 2026-10-16 补充：按用户要求加入可选的本机 Codex 宿主新 Agent 规格内容评审。沿用既有模型登录和模块确认流程；原生来源核对不等于强制权限隔离，也不自动通过正式就绪门槛。普通采访及有效候选包导出不要求执行评审。见 [ADR-022](../../docs/adr/ADR-022-NATIVE-HOST-AGENT-SPEC-REVIEW.md)。
 
@@ -76,7 +76,7 @@ codex plugin add xmi@xmi-local --json
 codex mcp list
 ```
 
-`codex plugin add` is the measured install command on that version; `plugin install` is not the command used by this host version. The handoff provider measured successful marketplace registration, XMi installation, MCP registration, server initialization and a 19-tool listing. This repository candidate does not relabel that external measurement as a test executed by this container.
+`codex plugin add` is the measured install command on that version; `plugin install` is not the command used by this host version. The handoff provider measured successful marketplace registration, XMi installation, MCP registration, server initialization and a 19-tool listing. That measurement belongs to the original M10 host test.
 
 For a local cross-surface acceptance run:
 
@@ -126,7 +126,7 @@ Removing the plugin does **not** delete the canonical SQLite file. Delete or arc
 - **Host form/elicitation is unavailable:** write operations that require Owner approval must fail closed. Continue read-only inspection or use a supported local host; do not emulate approval in chat or tool arguments.
 - **Interrupted session/process:** reconnect to the same database and call `xmi_project_resume`; canonical state comes from XMi storage, not the prior transcript.
 
-## Private-alpha configuration boundary
+## M10 historical configuration boundary
 
 The three absolute-path substitutions in `.mcp.json` are visible manual developer setup, not hidden product state. For the `docs/16` section 3 stop condition, M10 treats this as a **partial stop-condition hit for the nontechnical target user**: a developer/Owner can follow the documented private-alpha procedure, but a nontechnical user should not be required to edit three machine paths unaided. M10 therefore does not claim nontechnical self-installation. A future mitigation should generate or validate the configured local copy without committing machine-specific paths; that follow-up belongs after M10 acceptance work and must not introduce remote infrastructure implicitly.
 
@@ -135,7 +135,7 @@ The three absolute-path substitutions in `.mcp.json` are visible manual develope
 M10 is a local private-alpha acceptance milestone, not public release.
 
 - ADR-009 defines V0 private alpha over locally reachable surfaces. Hosted ChatGPT testing is a public-plugin gate item; public HTTPS, Secure MCP Tunnel, authentication, multi-tenant hosting and paid infrastructure remain unapproved under ADR-005.
-- Local installation and MCP registration have measured external host evidence from the M10 handoff provider. Real-session explicit Skill invocation and real-host negative selection behavior still require host acceptance evidence; this candidate container cannot execute them.
+- Local installation and MCP registration have measured external host evidence from the M10 handoff provider. Real-session explicit Skill invocation and real-host negative selection behavior still require host acceptance evidence; the historical fixture did not cover them.
 - F-3 remains open: bounded-snapshot mutation denial is measured, but effective shell/host isolation and a real independent LLM review are not claimed.
 - I-3 remains open: authenticated human identity is not established by native session routing; Owner-gated writes require the configured genuine native next-reply grant or applicable host form/page review.
 - F-2 remains `PARTIALLY_CLOSED` unless a real XDev runtime import report is produced: `XDEV-DELIVERY-HANDOFF/1` is frozen and semantically accepted Owner-relayed, but an XMi conformance stub is not real-XDev runtime evidence.

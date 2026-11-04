@@ -9,10 +9,15 @@ const require = createRequire(import.meta.url);
 const addFormats = require("ajv-formats") as typeof import("ajv-formats").default;
 const ajv = new Ajv2020({ allErrors: true, strict: false });
 addFormats(ajv);
-// Both source execution and emitted dist execution resolve the checked-in contract.
+// Source execution, emitted dist execution, and single-file bundle all resolve the checked-in contract.
+// - source:  packages/core/validation.ts        -> ../../schemas/
+// - dist:    dist/packages/core/validation.js   -> ../../../schemas/
+// - bundle:  <pkg>/dist/xmi-mcp.mjs             -> ../schemas/
 const base = import.meta.url.includes("/dist/packages/")
   ? new URL("../../../schemas/", import.meta.url)
-  : new URL("../../schemas/", import.meta.url);
+  : import.meta.url.includes("/dist/")
+    ? new URL("../schemas/", import.meta.url)
+    : new URL("../../schemas/", import.meta.url);
 function compileXSpecValidator() {
   const legacy = JSON.parse(readFileSync(new URL("xspec-v0.2.schema.json", base), "utf8"));
   const current = JSON.parse(readFileSync(new URL("xspec.schema.json", base), "utf8"));

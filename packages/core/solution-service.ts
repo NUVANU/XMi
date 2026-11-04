@@ -147,10 +147,23 @@ export class SolutionService {
     const {options, recommended, local} = selection;
     const capability = aiProfile(project);
     const blueprintId = `BLUEPRINT-${fingerprint({project_id: project.project_id, assessment: assessment.fingerprint, mode}).slice(0, 12).toUpperCase()}`;
-    const preserve = confirmedSolutionInputs(project).filter((item) => (["solution_constraint", "constraint", "non_functional_requirement", "exclusion"].includes(item.type) ||
+    let preserve = confirmedSolutionInputs(project).filter((item) => (["solution_constraint", "constraint", "non_functional_requirement", "exclusion"].includes(item.type) ||
         item.tags?.some((tag) => ["technology-choice", "stack", "engine"].includes(tag))))
       .map((item) => item.statement);
-    requireCondition(preserve.length < 30, "SOLUTION_CONSTRAINT_LIMIT");
+    // Keep every statement and the existing 30-entry/2000-character contract. Large models
+    // share entries instead of dropping constraints or raising the published capacity.
+    if (preserve.length >= 30) {
+      const packed: string[] = [];
+      for (const statement of preserve) {
+        requireCondition(statement.length <= 2000, "SOLUTION_CONSTRAINT_LIMIT");
+        const last = packed.at(-1);
+        if (last !== undefined && last.length + 2 + statement.length <= 2000) {
+          packed[packed.length - 1] = last + "\n\n" + statement;
+        } else packed.push(statement);
+      }
+      preserve = packed;
+    }
+    requireCondition(preserve.length < 30 && preserve.every(statement => statement.length <= 2000), "SOLUTION_CONSTRAINT_LIMIT");
     preserve.push("XDev may refine module architecture and implementation details but must return an amendment request before replacing an approved material solution constraint.");
     const delegated = ["Module boundaries and internal decomposition within the approved stack profile.",
       "Library/package and internal API choices that do not change recurring cost, privacy exposure, lock-in, product behavior, offline capability, legal risk or maintenance commitment."];

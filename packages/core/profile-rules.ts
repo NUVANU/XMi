@@ -1,4 +1,14 @@
-import type { Candidate, DeliveryMode } from "../shared-types/domain.ts";
+import type { Candidate, DeliveryMode, Item } from "../shared-types/domain.ts";
+
+/** Recognize an actual ownership boundary, never an undecided or negated safeguard. */
+export function dataIsolationRule(item: Item): boolean {
+  if (item.status !== "CONFIRMED" || !["permission_rule", "functional_requirement", "decision"].includes(item.type)) return false;
+  return item.statement.split(/[。；;\n]/u).some(clause => {
+    if (/[?？]|是否|待定|(?:不需要|无需|无须|不实现|不要求|不做)[^。；;\n]{0,20}(?:隔离|isolation)|隔离[^。；;\n]{0,15}(?:未实现|不实现|后置)|(?:no|without)\s+(?:user |data |tenant )?isolation|isolation[^。；;\n]{0,20}(?:not|disabled|deferred)|(?:不能|无法|未能)(?:防止|阻止|保证|确保)/iu.test(clause)) return false;
+    return /isolation|own data|tenant|隔离|自己的数据|租户/iu.test(clause) ||
+      /(?:不能|不得|禁止|拒绝|无权|不允许)[^。；;\n]{0,80}(?:读取|访问|修改|领取|写入|查看)[^。；;\n]{0,20}(?:其他|他人|别的)[^。；;\n]{0,20}(?:账号|账户|用户|数据|收藏|手牌|奖励)/u.test(clause);
+  });
+}
 
 export type ProfileArea = "PRODUCT_USERS" | "IDENTITY_ACCESS" | "DATA" | "FUNCTIONAL_STATES" |
   "COMMERCIAL" | "NOTIFICATIONS_INTEGRATIONS" | "SECURITY_PRIVACY" | "NON_FUNCTIONAL";
@@ -166,7 +176,7 @@ export const DIGITAL_GAME_V0_RULES: readonly ProfileRule[] = [
   r("game.external-services", "NOTIFICATIONS_INTEGRATIONS", "external provider, data sharing and fallback", "FAST_DEVELOPMENT", "INTEGRATION",
     ["integration", "decision", "functional_requirement"], ["game-integration"], ["provider", "fallback", "service", "供应商", "降级", "外部服务"]),
   r("game.privacy", "SECURITY_PRIVACY", "player data, moderation and safety scope", "FAST_DEVELOPMENT", "ALWAYS",
-    ["decision", "risk", "permission_rule", "constraint"], ["game-safety"], ["privacy", "moderation", "safety", "隐私", "审核", "安全"]),
+    ["decision", "risk", "permission_rule", "constraint", "data_entity"], ["game-safety"], ["privacy", "moderation", "safety", "隐私", "审核", "安全"]),
   r("game.operations", "NON_FUNCTIONAL", "performance, compatibility and recovery expectations", "PRODUCT_GRADE", "ALWAYS",
     ["non_functional_requirement", "decision"], ["game-operations"], ["performance", "compatibility", "recovery", "性能", "兼容", "恢复"]),
 ];

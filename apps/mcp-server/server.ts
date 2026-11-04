@@ -31,6 +31,8 @@ import {SpecReviewRunner} from "./spec-review-runner.ts";
 import type {HostSpecReviewRunner} from "./host-spec-review.ts";
 import {DocumentReviewRunner} from "./document-review.ts";
 import type {LocalProject, ProjectWorkspaces, ProjectStorageStatus} from "./project-workspaces.ts";
+import type {HybridConnector} from "../../packages/cloud-access/connector.ts";
+import {remoteOperations} from "../../packages/cloud-access/contracts.ts";
 
 type Extra = RequestHandlerExtra<ServerRequest, ServerNotification>;
 const parse = <N extends ToolName>(name: N, input: unknown): Input<N> => inputs[name].parse(input) as Input<N>;
@@ -60,7 +62,7 @@ export const toolDescriptors: Tool[] = (Object.keys(inputs) as ToolName[]).map((
 function failure(error: unknown) {
   const original = error instanceof DomainError ? error.code : "INTERNAL_ERROR";
   const code = original === "VERSION_CONFLICT" ? "PROJECT_VERSION_CONFLICT" : original;
-  const transient = ["PROJECT_VERSION_CONFLICT", "CONSENT_UNAVAILABLE", "REQUEST_CANCELLED", "STORAGE_FAILURE"].includes(code);
+  const transient = ["PROJECT_VERSION_CONFLICT", "CONSENT_UNAVAILABLE", "REQUEST_CANCELLED", "STORAGE_FAILURE", "HYBRID_CLOUD_UNAVAILABLE", "HYBRID_PROJECT_VERSION_CONFLICT"].includes(code);
   const details: {current_version?: number; required_milestone?: "M4" | "M5"} = {};
   if (error instanceof DomainError && error.current_version) details.current_version = error.current_version;
   if (code === "M4_DEPENDENCY_UNAVAILABLE" || code === "M5_DEPENDENCY_UNAVAILABLE") {
@@ -71,6 +73,9 @@ function failure(error: unknown) {
     message: details.required_milestone ? "The required milestone engine is unavailable; no assessment or mutation occurred."
       : code === "PROJECT_VERSION_CONFLICT" ? "The project changed after this view was generated."
       : code === "OWNER_DECLINED" ? "The Owner did not approve this exact change; nothing was written."
+      : code === "PAYMENT_REQUIRED" ? "本项目的这项服务需要购买项目权益；已有本地资料仍保留。"
+      : code === "PROJECT_KEY_PROJECT_MISMATCH" ? "这个项目 key 已绑定其他项目；没有执行本次操作。"
+      : code === "HYBRID_CLOUD_UNAVAILABLE" ? "云端服务暂时不可用；没有回退为免费本地计算。"
       : code === "CONSENT_UNAVAILABLE" ? "A trusted host form response is required; model text is not consent."
       : code === "REVIEW_TOO_LARGE" ? "这次确认内容过长，尚未显示批准框，也没有确认任何内容。"
       : code === "CHAT_CONFIRMATION_UNAVAILABLE" ? "模块聊天确认桥未就绪；需要 Codex 原生信任新增的 XMi 用户回复钩子，并加载真实会话。没有确认任何内容。"
@@ -93,6 +98,9 @@ function failure(error: unknown) {
       : code === "CONSENT_UNAVAILABLE" ? "Use a local client supporting user-facing MCP form elicitation; do not supply an actor or approval flag."
       : code === "PROJECT_VERSION_CONFLICT" || code === "FINGERPRINT_MISMATCH" ? "Refresh the project and review the exact current item or mode before retrying."
       : code === "OWNER_DECLINED" ? "Leave state unchanged unless the Owner requests a new review."
+      : code === "PAYMENT_REQUIRED" ? "购买同一项目的权益后沿用原 key 继续；不要重新创建项目。真实支付未开通时，不能用模型声明或截图解锁。"
+      : code === "PROJECT_KEY_PROJECT_MISMATCH" ? "恢复原项目及其连接配置；新项目使用独立 key。"
+      : code === "HYBRID_CLOUD_UNAVAILABLE" ? "可读取已有本地项目；联网恢复后重试原请求，不更换幂等键或直接修改数据库。"
       : code === "CHAT_REVIEW_REQUIRED" ? "用 xmi_item_review_prepare 准备本次设定、交付模式或风险操作，将完整 review_text 原样展示在最终聊天回复。只由真实用户下一次文字回复执行；保存提案不代表批准采用。不要重试弹窗。"
       : code === "REVIEW_TOO_LARGE" ? "完整记录超过安全上限；保留原草稿和来源，回聊天整理独立条目后重新审核。不要截断、自动确认或反复重试同一个巨大表单。"
       : code === "CHAT_CONFIRMATION_UNAVAILABLE" ? "保留草稿并展示模块内容。完成插件原生钩子信任、重新加载后再准备确认清单；不要回退到逐条批准弹窗。"
@@ -127,7 +135,7 @@ function auditEvidence(result: AuditResult): M8AuditEvidence {
  * into the same versioned envelope, rather than echoing validator input to clients.
  * No HTTP, SDK sampling, auth, UI resources, logging or generic dispatch tool.
  */
-export type XmiServerOptions = {storagePath?: string; ownerActionRef?: string;
+export type XmiServerOptions = {storagePath?: string; ownerActionRef?: string; hybrid?: HybridConnector;
   projectDirectory?: string; workspaces?: ProjectWorkspaces;
   workspaceOptions?: (binding: LocalProject) => {options: XmiServerOptions; close?: () => void};
   specReview?: SpecReviewRunner;
@@ -149,7 +157,7 @@ export function createXmiServer(service: ProjectService, options: XmiServerOptio
   function dispatchFor(service: ProjectService, options: XmiServerOptions) {
   const interview = new InterviewService();
   const solution = new SolutionService();
-  const xspec = new XSpecService(options.projectDirectory);
+  const xspec = new XSpecService(options.projectDirectory, service);
   const auditor = new AuditService();
   const specReview = options.specReview ?? new SpecReviewRunner();
   const reviewSummary = (p: Project) => options.hostSpecReview instanceof DocumentReviewRunner
@@ -334,6 +342,13 @@ export function createXmiServer(service: ProjectService, options: XmiServerOptio
   }
 
   async function dispatch(name: ToolName, raw: unknown, extra: Extra): Promise<unknown> {
+    if (options.hybrid && remoteOperations.some(operation => operation === name)) {
+      const args = parse(name, raw) as Record<string, unknown>;
+      const data = await options.hybrid.evaluate(service, String(args.project_id), name as typeof remoteOperations[number], args, extra.signal);
+      if (name === "xmi_project_resume") return {...data,
+        delivery_workflow: documentDelivery(reviewSummary(service.get(String(args.project_id))))};
+      return data;
+    }
     switch (name) {
       case "xmi_item_review_prepare": {
         const a = parse(name, raw);
@@ -608,7 +623,25 @@ export function createXmiServer(service: ProjectService, options: XmiServerOptio
       writing = metadata[name].write;
       const runtime = binding ? options.workspaceOptions?.(binding) ?? {options: {projectDirectory: binding.root, storagePath: binding.database}} : undefined;
       release = runtime?.close;
-      const data = await (binding ? dispatchFor(binding.service, runtime!.options) : dispatch)(name, parsed.data, extra);
+      const active = binding?.service ?? service;
+      if (options.hybrid && name === "xmi_project_create") {
+        const cloud = await options.hybrid.binding(extra.signal);
+        requireCondition(cloud.status !== "PAYMENT_REQUIRED", "PAYMENT_REQUIRED");
+        if (cloud.project_id) {
+          let prior: LocalProject | undefined;
+          try {
+            prior = options.workspaces?.resolve(cloud.project_id, directory);
+            requireCondition((prior?.service ?? service).createdProjectId(String(args.idempotency_key)) === cloud.project_id,
+              "PROJECT_KEY_PROJECT_MISMATCH");
+          } finally {prior?.close();}
+        }
+      }
+      const delivery = ["xmi_audit_run", "xmi_readiness_evaluate", "xmi_xspec_compile", "xmi_xspec_validate", "xmi_export_package"].includes(name);
+      if (options.hybrid && id && (writing || delivery || name.endsWith("_prepare"))) {
+        const candidate = name === "xmi_patch_apply" ? (args.patch as {candidate: unknown}).candidate : undefined;
+        await options.hybrid.check(active, id, delivery, extra.signal, candidate ? fingerprint(candidate) : undefined);
+      }
+      const data = await (binding ? dispatchFor(binding.service, {...runtime!.options, hybrid: options.hybrid}) : dispatch)(name, parsed.data, extra);
       if (name === "xmi_project_create" && options.workspaces) {
         binding = options.workspaces.resolve((data as {project_id: string}).project_id, directory);
       }

@@ -11,6 +11,7 @@ dist/
 
 # Local manual backups (git history already preserves the previous version)
 *.bak-*
+*.before-*
 
 exports/
 .xmi-install/

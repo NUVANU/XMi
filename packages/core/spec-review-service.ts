@@ -84,7 +84,9 @@ export const hostSpecReviewStatusSchema = z.strictObject({schema_version: z.lite
 export type HostSpecReviewStatus = z.infer<typeof hostSpecReviewStatusSchema>;
 
 export function reviewPolicyFingerprint(): string {
-  const root = new URL(import.meta.url.includes("/dist/") ? "../../../" : "../../", import.meta.url);
+  // dist/packages/... needs three levels up; a single-file bundle under dist/ needs one; source needs two.
+  const root = new URL(import.meta.url.includes("/dist/packages/") ? "../../../"
+    : import.meta.url.includes("/dist/") ? "../" : "../../", import.meta.url);
   const paths = ["packages/core/spec-review-service.ts", "packages/core/xspec-service.ts", "packages/core/completeness-service.ts",
     "packages/core/audit-service.ts", "packages/core/payment-scope.ts", "packages/core/profile-rules.ts", "packages/core/validation.ts",
     "packages/core/solution-feasibility.ts", "packages/core/solution-options.ts", "packages/core/m11-assurance-mechanisms.ts",
@@ -92,7 +94,8 @@ export function reviewPolicyFingerprint(): string {
     "apps/mcp-server/contracts.ts", "apps/mcp-server/server.ts", "apps/mcp-server/main.ts",
     "apps/mcp-server/host-spec-review.ts", "apps/mcp-server/native-spec-review.ts", "apps/mcp-server/review-transport.ts",
     "packages/core/spec-review-preflight.ts", "tools/spec-review-preflight.mjs", "packages/core/document-review.ts", "apps/mcp-server/document-review.ts",
-    "schemas/xmi-project.schema.json", "schemas/xspec.schema.json", "schemas/xspec-v0.2.schema.json", "package-lock.json"];
+    "schemas/xmi-project.schema.json", "schemas/xspec.schema.json", "schemas/xspec-v0.2.schema.json",
+    "docs/public/producer-evidence.schema.json", "package-lock.json"];
   return fingerprint({revision: "XMI-REVIEW-POLICY/1", instructions: reviewInstructions, limits: reviewLimits,
     files: paths.map(path => [path, sha(readFileSync(new URL(path, root)))])});
 }
@@ -108,6 +111,9 @@ function projection(artifact: CompiledArtifact): string {
   const manifest = JSON.parse(artifact.files.find(f => f.path === "manifest.json")!.content);
   delete xspec.readiness; delete xspec.integrity;
   delete manifest.file_sha256; delete manifest.canonical_xspec_sha256;
+  // The optional proof repeats the same readiness-dependent subject hash. Keep
+  // event/source references in the projection; full validation still binds the hash.
+  if (manifest.producer_evidence) delete manifest.producer_evidence.subject.canonical_xspec_sha256;
   return fingerprint({xspec, manifest, files: artifact.files.filter(f => !["xspec.json", "manifest.json", "READINESS-REPORT.md"].includes(f.path))});
 }
 export function buildReviewBundle(project: Project): ReviewBundle {

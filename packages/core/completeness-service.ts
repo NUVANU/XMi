@@ -1,6 +1,6 @@
 import type { DeliveryMode, Item, Project, RiskOverrideResolution } from "../shared-types/domain.ts";
 import { fingerprint } from "./validation.ts";
-import { WEB_MICRO_SAAS_V0_RULES, DIGITAL_GAME_V0_RULES } from "./profile-rules.ts";
+import { WEB_MICRO_SAAS_V0_RULES, DIGITAL_GAME_V0_RULES, dataIsolationRule } from "./profile-rules.ts";
 import type { ApplicabilityKey, ProfileArea, ProfileRule } from "./profile-rules.ts";
 import { riskContext, unsafeExclusionItems } from "./risk-context.ts";
 import { assessFeasibility } from "./solution-feasibility.ts";
@@ -134,6 +134,10 @@ function evidence(project: Project, rule: ProfileRule): Item[] {
   const tags = words(rule.evidence_tags); const keywords = words(rule.evidence_keywords);
   return project.items.filter(active).filter((item) => {
     const body = text(item);
+    if (rule.id === "security.user-isolation") return dataIsolationRule(item);
+    if (rule.id === "game.privacy" && item.type === "data_entity") return item.statement.split(/[。；;\n]/u).some(clause =>
+      !/[?？]|是否|待定/u.test(clause) && /账号|邮箱|数据|资料|记录|account|data|email/iu.test(clause) &&
+      /用途|用于|保留|清理|删除|retention|purpose/iu.test(clause));
     if (rule.id === "security.data-sensitivity" && item.status === "CONFIRMED" && rule.evidence_types.includes(item.type) &&
       item.statement.split(/[。；;\n]/u).some(clause => !/[?？]|是否|待定/u.test(clause) &&
         /^(?:首期|本期|当前|V0)?(?:评测)?(?:数据|资料|案例)(?:范围)?[：:\s]*(?:仅使用|只使用|仅采用|只采用|仅限于?|限定为|全部为|均为)[：:\s]*公开(?:的)?合成(?:数据|资料|案例)(?=[\s，,]|$)/iu.test(clause.trim()))) return true;
@@ -153,6 +157,10 @@ function ruleResults(project: Project): ProfileRuleResult[] {
   const rules = project.profile === "digital-game-v0" ? DIGITAL_GAME_V0_RULES : WEB_MICRO_SAAS_V0_RULES;
   const payment = paymentScope(project, isRiskScopeDeferred(project, "PAYMENT_OR_FINANCIAL"));
   return rules.map((rule) => {
+    if (rule.id === "game.monetization" && payment.not_applicable) return {
+      rule_id: rule.id, area: rule.area, label: rule.label, minimum_mode: rule.minimum_mode,
+      applicability: "NOT_APPLICABLE" as const, considered: true, confirmed: true, evidence_ids: payment.exclusion_ids,
+    };
     if (rule.id === "commercial.payment-failure") {
       const app = payment.not_applicable ? "NOT_APPLICABLE" : payment.conflict ? "UNRESOLVED" :
         payment.current_ids.length ? "APPLICABLE" : applicability(project, rule.applicability).value;

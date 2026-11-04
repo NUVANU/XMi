@@ -11,8 +11,9 @@ import { createSingleReviewRouter } from "../local-module-review/single.ts";
 import {DocumentReviewRunner} from "./document-review.ts";
 import {ProjectWorkspaces} from "./project-workspaces.ts";
 import {projectPath} from "../../packages/storage/project-files.ts";
+import type {HybridConnector} from "../../packages/cloud-access/connector.ts";
 
-async function main(nativeReview: boolean) {
+async function main(nativeReview: boolean, hybrid?: HybridConnector) {
   const [flag, path, ...extra] = process.argv.slice(2);
   if (flag !== "--db" || !path || !isAbsolute(path) || path.startsWith("\\\\") || path.startsWith("//") || extra.length) {
     process.stderr.write("XMI_STARTUP_INVALID_ARGUMENTS: provide --db with an absolute local SQLite path.\n");
@@ -28,7 +29,7 @@ async function main(nativeReview: boolean) {
   const hostSpecReview = nativeReview ? new DocumentReviewRunner({directory: join(dirname(path), "xmi-spec-reviews"),
     sessions: join(homedir(), ".codex", "sessions"), native: moduleReviewDirectory()}) : undefined;
   const workspaces = new ProjectWorkspaces(join(dirname(path), "xmi-project-locations.sqlite"));
-  const server = createXmiServer(service, {storagePath: path, moduleReview, singleReview, hostSpecReview, workspaces,
+  const server = createXmiServer(service, {storagePath: path, moduleReview, singleReview, hostSpecReview, workspaces, hybrid,
     workspaceOptions: binding => {
       const reviewer = nativeReview ? new DocumentReviewRunner({directory: projectPath(binding.root, ".xmi", "reviews"),
         sessions: join(homedir(), ".codex", "sessions"), native: moduleReviewDirectory()}) : undefined;
@@ -50,8 +51,8 @@ async function main(nativeReview: boolean) {
     closeStore(); throw new Error("STARTUP");
   }
 }
-export function startXmi(nativeReview: boolean) {
-  return main(nativeReview).catch(() => {
+export function startXmi(nativeReview: boolean, hybrid?: HybridConnector) {
+  return main(nativeReview, hybrid).catch(() => {
     process.stderr.write("XMI_STARTUP_FAILED: inspect local path and database permissions; no raw payload logged.\n");
     process.exitCode = 1;
   });

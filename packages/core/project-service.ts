@@ -79,6 +79,10 @@ function transition(previous: Project | undefined, event: Omit<DomainEvent, "has
         item.confirmed_by = "owner"; item.confirmed_at = at;
       } else {
         delete item.confirmed_by; delete item.confirmed_at;
+        if (item.blueprint_detail) {
+          item.blueprint_detail.owner_disposition = null;
+          item.blueprint_detail.delegation = null;
+        }
       }
     } else if (command.kind === "DECISION_APPROVED") {
       requireCondition(actor === "owner", "OWNER_ACTION_REQUIRED");
@@ -383,6 +387,10 @@ export class ProjectService {
       const receipt = tx.receipt(request.project_id + ":" + request.idempotency_key);
       return receipt ? this.retry(tx, receipt, fingerprint({...request, actor})) : undefined;
     });
+  }
+  /** Read-only creation retry lookup; create() still verifies the exact request fingerprint. */
+  createdProjectId(idempotencyKey: string): string | undefined {
+    return this.store.transaction(tx => tx.receipt("create:" + idempotencyKey)?.project_id);
   }
 
   private retry(tx: StoreTransaction, receipt: {request_hash: string; project_id: string; version: number},

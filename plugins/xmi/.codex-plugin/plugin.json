@@ -1,6 +1,6 @@
 {
   "name": "xmi",
-  "version": "0.1.0",
+  "version": "0.1.0+local.20261026",
   "description": "XMi private local product-definition plugin",
   "author": {
     "name": "Local developer"

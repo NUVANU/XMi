@@ -13,13 +13,13 @@
   "scripts": {
     "mcp": "node dist/apps/mcp-server/main.js",
     "build": "tsc -p tsconfig.json",
+    "build:connector": "node tools/build-connector.mjs",
     "lint": "eslint apps packages tests tools eslint.config.mjs --max-warnings 0",
     "test": "node --test tests/*.test.ts",
     "configure": "node tools/configure.mjs",
     "check": "node tools/self-check.mjs",
     "check:docx-source": "node tools/prepare-docx-api.mjs --check",
-    "build:docx-browser": "node tools/build-docx-browser.mjs",
-    "package:release": "node tools/package-release.mjs"
+    "build:docx-browser": "node tools/build-docx-browser.mjs"
   },
   "devDependencies": {
     "@types/node": "24.13.4",

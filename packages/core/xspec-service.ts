@@ -1,7 +1,8 @@
 import {createHash} from "node:crypto";
 import {existsSync, mkdirSync, readFileSync, rmSync, writeFileSync} from "node:fs";
 import {join, resolve} from "node:path";
-import type {DeliveryMode, Item, Project} from "../shared-types/domain.ts";
+import {Ajv2020} from "ajv/dist/2020.js";
+import type {DeliveryMode, DomainEvent, Item, Project, SourceRef} from "../shared-types/domain.ts";
 import {CompletenessService, evaluateRisk, invalidRiskOverrides} from "./completeness-service.ts";
 import type {M8ReadinessEvidence, ReadinessEvaluation} from "./completeness-service.ts";
 import {requireCondition} from "./errors.ts";
@@ -10,6 +11,7 @@ import {canonical, fingerprint, rejectSecrets, schemaValidators} from "./validat
 import {projectPath} from "../storage/project-files.ts";
 import {documentDelivery, documentDeliveryMarkdown} from "./document-delivery.ts";
 import type {DeliveryWorkflow, DocumentReviewSummary} from "./document-delivery.ts";
+import {ProjectService, replay} from "./project-service.ts";
 
 export const HANDOFF_CONTRACT_VERSION = "XDEV-DELIVERY-HANDOFF/1";
 const HANDOFF_VERSION_VALUE = "1";
@@ -33,6 +35,9 @@ export type ValidationIssue = {
 export type ConsumerImportResult = {
   consumer: "XUI" | "XDEV";
   accepted: boolean;
+  validation_scope: "LOCAL_CONFORMANCE";
+  downstream_receipt: "NOT_OBSERVED";
+  implementation_authorized: false;
   errors: ValidationIssue[];
   handoff_contract_version: string | null;
   project_mode: DeliveryMode | null;
@@ -99,6 +104,90 @@ type DeliveryProfile = {
   }>;
   handoff_contract_version?: string;
 };
+
+type ProducerEventReference = {
+  event_id: string; event_version: number; event_hash: string; actor: "owner";
+  command_kind: string; owner_source_ref: {type: "owner_action"; ref: string};
+};
+type ReferencedSource = {status: "SOURCE_REFERENCED_NOT_AUTHENTICATED" | "UNAVAILABLE"; event: ProducerEventReference | null};
+export type ProducerEvidence = {
+  format: "XMI-PRODUCER-EVIDENCE/1";
+  evidence_status: "SOURCE_REFERENCED_NOT_AUTHENTICATED";
+  source_coverage: "COMPLETE" | "PARTIAL" | "UNAVAILABLE";
+  subject: {project_id: string; product_model_version: number; spec_id: string; spec_version: string; canonical_xspec_sha256: string};
+  mode_selection: ReferencedSource & {project_mode: DeliveryMode; selection_source: DeliveryProfile["selection_source"]};
+  item_confirmations: Array<ReferencedSource & {item_id: string; item_version: number}>;
+  scope_dispositions: Array<ReferencedSource & {id: string; scope_ids: string[]; minimum_mode: DeliveryMode;
+    resolution: DeliveryProfile["scope_overrides"][number]["resolution"]; source_refs: Array<Pick<SourceRef, "type" | "ref">>}>;
+};
+const producerSchemaUrl = new URL(import.meta.url.includes("/dist/packages/")
+  ? "../../../docs/public/producer-evidence.schema.json" : import.meta.url.includes("/dist/")
+    ? "../docs/public/producer-evidence.schema.json" : "../../docs/public/producer-evidence.schema.json", import.meta.url);
+const producerEvidenceValid = new Ajv2020({strict: false, allErrors: true})
+  .compile(JSON.parse(readFileSync(producerSchemaUrl, "utf8")));
+
+function eventReference(event: DomainEvent | undefined): ProducerEventReference | null {
+  if (!event || event.actor !== "owner" || !("owner_action" in event.command)) return null;
+  const source = event.command.owner_action.source_ref;
+  return {event_id: event.event_id, event_version: event.version, event_hash: event.hash, actor: "owner",
+    command_kind: event.command.kind, owner_source_ref: {type: "owner_action", ref: source.ref}};
+}
+function referenced(event: ProducerEventReference | null): ReferencedSource {
+  return {status: event ? "SOURCE_REFERENCED_NOT_AUTHENTICATED" : "UNAVAILABLE", event};
+}
+function exportedConfirmedItems(project: Project, xspec: XSpecDocument): Item[] {
+  const ids = new Set<string>();
+  const include = (value: unknown) => {
+    if (value && typeof value === "object" && "id" in value && typeof value.id === "string") ids.add(value.id);
+  };
+  include(xspec.product_vision);
+  for (const key of ["actors", "goals", "out_of_scope", "user_flows", "requirements", "acceptance_criteria",
+    "data_entities", "permission_rules", "integrations", "non_functional_requirements", "decisions", "risks"]) {
+    for (const row of (xspec[key] as unknown[] | undefined) ?? []) include(row);
+  }
+  for (const row of xspec.reference_records ?? []) if (row.kind === "CONFIRMED_CONSTRAINT") include(row);
+  const blueprint = activeConfirmed(project, "solution_blueprint").at(-1);
+  if (blueprint) ids.add(blueprint.id);
+  return byId(project.items.filter(item => item.status === "CONFIRMED" && ids.has(item.id)));
+}
+function producerEvidence(project: Project, xspec: XSpecDocument, historySource?: ProjectService): ProducerEvidence {
+  // Only the locally wired domain service supplies history; MCP callers cannot submit events.
+  const events = historySource?.history?.(project.project_id);
+  if (events) requireCondition(fingerprint(replay(events)) === fingerprint(project), "PRODUCER_HISTORY_VERSION_MISMATCH");
+  const latest = (match: (event: DomainEvent) => boolean) => events?.findLast(match);
+  const policy = xspec.delivery_profile;
+  const modeEvent = policy.selection_source === "OWNER_CONFIRMED" ? latest(event =>
+    (event.command.kind === "DELIVERY_MODE_SELECTED" || event.command.kind === "DELIVERY_MODE_UPGRADED") &&
+    event.command.mode === policy.project_mode) : undefined;
+  const mode = {...referenced(eventReference(modeEvent)), project_mode: policy.project_mode, selection_source: policy.selection_source};
+  const items = exportedConfirmedItems(project, xspec).map(item => {
+    const source = eventReference(latest(event => {
+      const command = event.command;
+      return (command.kind === "ITEM_CONFIRMED" || command.kind === "DECISION_APPROVED" ||
+        command.kind === "SOLUTION_BLUEPRINT_APPROVED" || command.kind === "SOLUTION_BLUEPRINT_DELEGATED") &&
+        command.item_id === item.id;
+    }));
+    const matched = source && item.source_refs.some(ref => ref.type === "owner_action" && ref.ref === source.owner_source_ref.ref);
+    return {item_id: item.id, item_version: item.version, ...referenced(matched ? source : null)};
+  });
+  const scopes = policy.scope_overrides.map(scope => {
+    const original = project.delivery_policy?.risk_overrides.find(row => row.id === scope.id && row.status === "CONFIRMED");
+    const source = eventReference(latest(event => event.command.kind === "MODE_OVERRIDE_RESOLVED" && event.command.override_id === scope.id));
+    const refs = original?.source_refs.map(({type, ref}) => ({type, ref})) ?? [];
+    const matched = source && refs.some(ref => ref.type === "owner_action" && ref.ref === source.owner_source_ref.ref);
+    return {id: scope.id, scope_ids: [...scope.scope_ids], minimum_mode: scope.minimum_mode, resolution: scope.resolution,
+      source_refs: refs, ...referenced(matched ? source : null)};
+  });
+  const rows = [mode, ...items, ...scopes], available = rows.filter(row => row.event !== null).length;
+  const result: ProducerEvidence = {format: "XMI-PRODUCER-EVIDENCE/1", evidence_status: "SOURCE_REFERENCED_NOT_AUTHENTICATED",
+    source_coverage: available === rows.length ? "COMPLETE" : available === 0 ? "UNAVAILABLE" : "PARTIAL",
+    subject: {project_id: project.project_id, product_model_version: project.model_version, spec_id: xspec.spec_id,
+      spec_version: xspec.spec_version, canonical_xspec_sha256: xspec.integrity.canonical_sha256},
+    mode_selection: mode, item_confirmations: items, scope_dispositions: scopes};
+  requireCondition(producerEvidenceValid(result), "PRODUCER_EVIDENCE_SCHEMA_INVALID");
+  rejectSecrets(result);
+  return result;
+}
 
 export type ReferenceRecord = {
   id: string; kind: "CONFIRMED_CONSTRAINT" | "HISTORICAL"; item_type: Item["type"];
@@ -361,18 +450,26 @@ function requirementsMissingAcceptance(xspec: XSpecDocument): Array<{id: string;
   return requirements.filter((requirement) => !requirement.acceptance_criterion_ids?.length)
     .map((requirement) => ({id: requirement.id, acceptance_criterion_ids: []}));
 }
+function acceptanceMissingRequirements(xspec: XSpecDocument): Array<{id: string; requirement_ids: string[]}> {
+  const acceptance = (xspec.acceptance_criteria as Array<{id: string; requirement_ids?: string[]}> | undefined) ?? [];
+  return acceptance.filter(criterion => !criterion.requirement_ids?.length)
+    .map(criterion => ({id: criterion.id, requirement_ids: []}));
+}
 function schemaFailureIsOnlyMissingAcceptance(xspec: XSpecDocument): boolean {
-  const missing = requirementsMissingAcceptance(xspec);
-  if (!missing.length) return false;
+  if (!requirementsMissingAcceptance(xspec).length && !acceptanceMissingRequirements(xspec).length) return false;
   const probe = structuredClone(xspec);
   const requirements = (probe.requirements as Array<{id: string; acceptance_criterion_ids?: string[]}> | undefined) ?? [];
   for (const requirement of requirements) if (!requirement.acceptance_criterion_ids?.length) {
     requirement.acceptance_criterion_ids = ["AC-M8-SCHEMA-PROBE"];
   }
+  const acceptance = (probe.acceptance_criteria as Array<{requirement_ids?: string[]}> | undefined) ?? [];
+  for (const criterion of acceptance) if (!criterion.requirement_ids?.length) {
+    criterion.requirement_ids = ["REQ-M8-SCHEMA-PROBE"];
+  }
   return !!schemaValidators.xspec!(probe);
 }
 
-function buildArtifact(project: Project, evidence: M8ReadinessEvidence, delivery?: DeliveryWorkflow): CompiledArtifact {
+function buildArtifact(project: Project, evidence: M8ReadinessEvidence, delivery?: DeliveryWorkflow, historySource?: ProjectService): CompiledArtifact {
   const xspec = compileDocument(project, evidence);
   rejectSecrets(xspec);
   const schemaValid = !!schemaValidators.xspec!(xspec);
@@ -408,6 +505,7 @@ function buildArtifact(project: Project, evidence: M8ReadinessEvidence, delivery
     file_sha256: payloadHashes,
     manifest_self_hash_policy: "MANIFEST_NOT_SELF_HASHED_TO_AVOID_RECURSION",
     compatibility_note: "XDev/XUi real minimum versions are not yet established; M7 provides conformance stubs only.",
+    producer_evidence: producerEvidence(project, xspec, historySource),
   };
   files.set("manifest.json", pretty(manifest));
   const ordered = XSPEC_PACKAGE_FILES.map((path) => ({path, content: files.get(path)!, sha256: sha256(files.get(path)!)}));
@@ -520,7 +618,8 @@ export function importForConsumer(xspec: XSpecDocument, consumer: "XUI" | "XDEV"
         escalates: override.resolution === "UPGRADE_SCOPE" || override.resolution === "UPGRADE_PROJECT"});
     }
   }
-  return {consumer, accepted: errors.length === 0, errors, handoff_contract_version: profile ? contractVersion : null,
+  return {consumer, accepted: errors.length === 0, validation_scope: "LOCAL_CONFORMANCE", downstream_receipt: "NOT_OBSERVED",
+    implementation_authorized: false, errors, handoff_contract_version: profile ? contractVersion : null,
     project_mode: projectMode, mapped_profile: projectMode && consumer === "XDEV" ? xdevProfile[projectMode] : null,
     owner_selected: false, selection_provenance_authenticated: false, scope_dispositions: scopeDispositions};
 }
@@ -551,17 +650,22 @@ function packageManifestValid(artifact: CompiledArtifact, xspec: XSpecDocument |
 
 export class XSpecService {
   private projectDirectory?: string;
-  constructor(projectDirectory?: string) {this.projectDirectory = projectDirectory;}
+  private historySource?: ProjectService;
+  constructor(projectDirectory?: string, historySource?: ProjectService) {
+    this.projectDirectory = projectDirectory; this.historySource = historySource;
+  }
   private exportRoot(packageName: string) {
     return this.projectDirectory ? projectPath(this.projectDirectory, "docs", "xspec", packageName) : resolve(process.cwd(), "exports", packageName);
   }
   private exportRelative(packageName: string) {return `${this.projectDirectory ? "docs/xspec" : "exports"}/${packageName}`;}
+  private resolvedEvidence(evidence: Partial<M8ReadinessEvidence>): M8ReadinessEvidence {
+    return {xui_compatible: evidence.xui_compatible ?? false, xdev_compatible: evidence.xdev_compatible ?? false,
+      owner_confirmed_export: evidence.owner_confirmed_export ?? false, immutable_export_exists: evidence.immutable_export_exists ?? false,
+      audit: evidence.audit ?? {audit_run_id: null, audit_status: "UNAVAILABLE", isolation_status: "UNAVAILABLE",
+        assurance_level: null, blocking_finding_count: 0}};
+  }
   compile(project: Project, evidence: Partial<M8ReadinessEvidence> = {}, delivery?: DeliveryWorkflow): CompiledArtifact {
-    const resolved: M8ReadinessEvidence = {xui_compatible: evidence.xui_compatible ?? false,
-      xdev_compatible: evidence.xdev_compatible ?? false, owner_confirmed_export: evidence.owner_confirmed_export ?? false,
-      immutable_export_exists: evidence.immutable_export_exists ?? false, audit: evidence.audit ?? {audit_run_id: null,
-        audit_status: "UNAVAILABLE", isolation_status: "UNAVAILABLE", assurance_level: null, blocking_finding_count: 0}};
-    return buildArtifact(project, resolved, delivery);
+    return buildArtifact(project, this.resolvedEvidence(evidence), delivery, this.historySource);
   }
 
   validate(project: Project, artifact: CompiledArtifact, evidence: Partial<M8ReadinessEvidence> = {}): XSpecValidation {
@@ -573,11 +677,16 @@ export class XSpecService {
       schemaValid = !!schemaValidators.xspec!(xspec);
       if (!schemaValid) {
         const missingAcceptance = requirementsMissingAcceptance(xspec);
-        if (missingAcceptance.length && schemaFailureIsOnlyMissingAcceptance(xspec)) {
+        const orphanAcceptance = acceptanceMissingRequirements(xspec);
+        if ((missingAcceptance.length || orphanAcceptance.length) && schemaFailureIsOnlyMissingAcceptance(xspec)) {
           for (const requirement of missingAcceptance) errors.push(issue("XSPEC_REQUIREMENT_ACCEPTANCE_MISSING",
             `Confirmed requirement ${requirement.id} has no exported acceptance criterion, so the strict XSpec schema is not yet satisfiable.`,
             "Add and confirm at least one acceptance criterion for this requirement, or revise/reject the requirement; XMi will keep the confirmed requirement visible and will not weaken the schema.",
             requirement.id));
+          for (const criterion of orphanAcceptance) errors.push(issue("XSPEC_ACCEPTANCE_REQUIREMENT_MISSING",
+            "Confirmed acceptance criterion " + criterion.id + " has no exported functional requirement association.",
+            "Link this criterion to the relevant confirmed functional requirement, or review its scope/type through Owner confirmation; XMi does not invent links or relax the export schema.",
+            criterion.id));
         } else {
           errors.push(issue("XSPEC_SCHEMA_INVALID", "xspec.json does not validate against schemas/xspec.schema.json.",
             "Fix the canonical Product Model/compiler mapping; do not weaken the schema."));
@@ -616,6 +725,27 @@ export class XSpecService {
     }
     const manifestErrors = packageManifestValid(artifact, xspec);
     errors.push(...manifestErrors);
+    if (xspec && manifestErrors.length === 0) {
+      const manifest = JSON.parse(artifact.files.find(file => file.path === "manifest.json")!.content) as Record<string, unknown>;
+      if (Object.hasOwn(manifest, "producer_evidence")) {
+        const supplied = manifest.producer_evidence;
+        if (!producerEvidenceValid(supplied)) errors.push(issue("XSPEC_PRODUCER_EVIDENCE_SCHEMA_INVALID",
+          "The optional producer evidence does not match its exact local schema.", "Reject this extension; do not ignore invalid source metadata."));
+        // Never derive the expected subject/content hash or scope from the inspected document.
+        // Recompile from the actual model so genuine events cannot endorse a rewritten payload.
+        else {
+          const expectedDocument = compileDocument(project, this.resolvedEvidence(evidence));
+          const expected = producerEvidence(project, expectedDocument, this.historySource);
+          // The trusted proof must also describe this inspected body and manifest, not only the model.
+          if (fingerprint(supplied) !== fingerprint(expected) ||
+            canonicalXSpecHash(xspec) !== expected.subject.canonical_xspec_sha256 ||
+            Object.entries(expected.subject).some(([key, value]) => manifest[key] !== value)) {
+            errors.push(issue("XSPEC_PRODUCER_EVIDENCE_MISMATCH", "Producer evidence does not match the inspected package and current domain subject/history.",
+              "Recompile from the exact current project history; do not repair evidence by hand."));
+          }
+        }
+      }
+    }
     // F-10: an unresolved blocking mode-risk is the one common hard gate that was reported but never
     // enforced at the export call. docs/08 section 5 lists it beside supported-profile and valid
     // schema/references, and both of those already refuse an export here; docs/16 section 4 states it

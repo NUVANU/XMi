@@ -3,6 +3,7 @@ import type { DeliveryMode, Item, Project } from "../shared-types/domain.ts";
 import { canonical, fingerprint } from "./validation.ts";
 import { isRiskScopeDeferred } from "./completeness-service.ts";
 import { paymentScope } from "./payment-scope.ts";
+import { dataIsolationRule } from "./profile-rules.ts";
 
 export const auditFindingSchema = z.strictObject({
   id: z.string().regex(/^AUDIT-FINDING-[A-Z0-9-]+$/),
@@ -75,7 +76,7 @@ export class AuditService {
       hidden.map((item) => item.id), "Confirm, reject or explicitly keep the material assumption non-authoritative before readiness."));
 
     const privateScope = accountOrPrivate(snapshot);
-    if (privateScope && !hasConfirmed(snapshot, ["permission_rule", "functional_requirement", "decision"], /isolation|own data|tenant|隔离|自己的数据|租户/i)) {
+    if (privateScope && !snapshot.items.some(dataIsolationRule)) {
       findings.push(finding("DATA_ISOLATION", "Account/private-data scope exists without a confirmed data-isolation rule.", [],
         "What confirmed rule prevents one user or tenant from accessing another user's private data?"));
     }

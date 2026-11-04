@@ -256,24 +256,31 @@ export class InterviewService {
     if (!module) return null;
     const matching = active.filter((item) => item.tags?.includes("module:" + module));
     const matchingIds = new Set(matching.map((item) => item.id));
+    const decisionLimit = Number.isFinite(questionCount) ? Math.max(1, Math.min(8, Math.floor(questionCount!))) : 8;
     const pending = [
       ...matching.filter((item) => item.status === "OPEN" || item.status === "BLOCKING" ||
         (item.decision_detail && !item.decision_detail.owner_selection && item.status !== "CONFIRMED"))
         .map((item) => ({id: item.id, question: item.decision_detail?.question ?? item.statement,
           priority: item.priority ?? "P1", blocking: item.status === "BLOCKING" || !!item.tags?.includes("material"),
-          options: item.decision_detail?.options.map((option) => ({id: option.id, label: option.label})) ?? []})),
+          options: item.decision_detail?.options.map((option) => ({id: option.id, label: option.label, impact: {...option.impact}})) ?? [],
+          why_it_matters: item.decision_detail?.why_it_matters ?? null,
+          recommendation: item.decision_detail ? {...item.decision_detail.recommendation} : null,
+          linked_requirements: [...(item.decision_detail?.linked_requirements ?? [])],
+          linked_flows: [...(item.decision_detail?.linked_flows ?? [])]})),
       ...project.open_questions.filter((q) => (q.status === "OPEN" || q.status === "BLOCKING") &&
         q.affected_ids?.some((id) => matchingIds.has(id)) && !matchingIds.has(q.id))
-        .map((q) => ({id: q.id, question: q.question, priority: q.priority, blocking: q.status === "BLOCKING", options: []})),
+        .map((q) => ({id: q.id, question: q.question, priority: q.priority, blocking: q.status === "BLOCKING", options: [],
+          why_it_matters: null, recommendation: null, linked_requirements: [], linked_flows: []})),
     ].sort((a, b) => Number(b.blocking) - Number(a.blocking) || a.priority.localeCompare(b.priority) || a.id.localeCompare(b.id));
     return {module, available_modules: modules.slice(0, 20), modules_truncated: modules.length > 20,
       review_brief: {format: "MODULE_REVIEW_BRIEF" as const,
         sections: ["CURRENT_DESIGN", "PENDING_DECISIONS_WITH_RECOMMENDATIONS", "EFFECTS_AND_CONFLICTS", "BATCH_REPLY"] as const,
-        decision_limit: questionCount ?? 8, recommendations_status: "UNADOPTED" as const, confirmation_granted: false as const},
-      pending_decisions: pending.slice(0, 8).map((decision) => ({...decision,
+        decision_limit: decisionLimit, recommendations_status: "UNADOPTED" as const, confirmation_granted: false as const},
+      pending_decisions: pending.slice(0, decisionLimit).map((decision) => ({...decision,
         question: decision.question.slice(0, 400), question_truncated: decision.question.length > 400,
         options: decision.options.slice(0, 8).map((option) => ({...option, label: option.label.slice(0, 400)}))})),
-      total_pending_decisions: pending.length, pending_decisions_truncated: pending.length > 8,
+      total_pending_decisions: pending.length, displayed_pending_decisions: Math.min(pending.length, decisionLimit),
+      remaining_pending_decisions: Math.max(0, pending.length - decisionLimit), pending_decisions_truncated: pending.length > decisionLimit,
       items: matching.slice(-12).map((item) => ({id: item.id, type: item.type, status: item.status,
         statement: item.statement.slice(0, 1200), statement_truncated: item.statement.length > 1200,
         item_version: item.version, source_refs: item.source_refs.slice(0, 3).map((source) => ({...source,

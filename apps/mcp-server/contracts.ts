@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { candidateSchema, modeSchema, productProfileSchema, sourceSchema } from "../../packages/shared-types/domain.ts";
+import { candidateSchema, decisionDetailSchema, decisionImpactSchema, modeSchema, productProfileSchema, sourceSchema } from "../../packages/shared-types/domain.ts";
 import { moduleConfirmationSchema } from "../../packages/core/module-confirmation.ts";
 import {specReviewStatusSchema, hostSpecReviewStatusSchema} from "../../packages/core/spec-review-service.ts";
 import {documentReviewStatusSchema} from "../../packages/core/document-review.ts";
@@ -175,6 +175,7 @@ const scopeOverrideNormalisation = z.strictObject({override_id: z.string(),
   recorded_minimum_mode: modeSchema, exported_minimum_mode: modeSchema});
 const consumerResult = z.strictObject({
   consumer: z.enum(["XUI", "XDEV"]), accepted: z.boolean(), errors: z.array(validationIssue),
+  validation_scope: z.literal("LOCAL_CONFORMANCE"), downstream_receipt: z.literal("NOT_OBSERVED"), implementation_authorized: z.literal(false),
   handoff_contract_version: z.string().nullable(), project_mode: modeSchema.nullable(),
   mapped_profile: z.enum(["prototype", "quick_verified", "full_governance"]).nullable(),
   owner_selected: z.literal(false), selection_provenance_authenticated: z.literal(false),
@@ -213,8 +214,11 @@ const moduleReview = z.strictObject({module: interviewModule,
     decision_limit: z.number().int().min(1).max(8), recommendations_status: z.literal("UNADOPTED"), confirmation_granted: z.literal(false)}),
   pending_decisions: z.array(z.strictObject({id: z.string(), question: z.string().max(400), question_truncated: z.boolean(),
     priority: z.enum(["P0", "P1", "P2", "P3"]), blocking: z.boolean(),
-    options: z.array(z.strictObject({id: z.string(), label: z.string().max(400)})).max(8)})).max(8),
-  total_pending_decisions: z.number().int().nonnegative(), pending_decisions_truncated: z.boolean(),
+    options: z.array(z.strictObject({id: z.string(), label: z.string().max(400), impact: decisionImpactSchema})).max(8),
+    why_it_matters: z.string().max(4000).nullable(), recommendation: decisionDetailSchema.shape.recommendation.nullable(),
+    linked_requirements: z.array(z.string().max(100)).max(50), linked_flows: z.array(z.string().max(100)).max(50)})).max(8),
+  total_pending_decisions: z.number().int().nonnegative(), displayed_pending_decisions: z.number().int().min(0).max(8),
+  remaining_pending_decisions: z.number().int().nonnegative(), pending_decisions_truncated: z.boolean(),
   items: z.array(z.strictObject({id: z.string(), type: candidateSchema.shape.type,
     status: z.enum(["INFERRED", "PROPOSED", "ASSUMED", "OPEN", "BLOCKING", "CONFIRMED"]),
     statement: z.string().max(1200), statement_truncated: z.boolean(), item_version: version,

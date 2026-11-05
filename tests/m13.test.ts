@@ -109,6 +109,35 @@ test("M13 offline-only tools do not recommend cloud stacks", () => {
   assert.equal(selection.options.some((entry) => /WEB-TYPESCRIPT|WEB-PYTHON/.test(entry.id)), false);
 });
 
+test("M13 local browser-only blueprint preserves page memory and excludes remote behavior", () => {
+  const p = project();
+  p.items[3]!.statement = "仅在本地浏览器运行；合成积木数据保存在页面内存，不要求持久化。";
+  p.items[5] = item("INTEGRATIONS-NONE", "不接入外部服务或 API，不需要账号、支付、云端或后端服务。", "integration");
+
+  const service = new SolutionService();
+  const review = service.review(p, source);
+  assert.equal(review.status, "PROPOSAL_AVAILABLE");
+  const candidate = review.proposed_patch!.candidate;
+  const blueprint = candidate.blueprint_detail!;
+  assert.equal(candidateSchema.safeParse(candidate).success, true);
+  assert.equal(candidate.status, "PROPOSED");
+  assert.equal(blueprint.recommendation.option_id, "SOLUTION-OPTION-STATIC-BROWSER");
+  assert.equal(blueprint.options.length, 2);
+  assert.ok(blueprint.options.every(option => /后端：无.*页面内存/.test(option.summary)));
+  assert.match(blueprint.deployment_topology, /仅在本地浏览器/);
+  assert.equal(blueprint.backend_need, "无后端服务。");
+  assert.match(blueprint.persistence_data_ownership, /保存在页面内存/);
+  assert.match(blueprint.authentication_authorization, /无账号或服务端鉴权/);
+  assert.match(blueprint.integration_boundaries, /不接入外部服务/);
+  assert.ok(blueprint.xdev_must_preserve.includes(p.items[3]!.statement));
+
+  p.items.push(item("LOGIN-REQUIRED", "不需要支付，但是用户需要登录。", "functional_requirement"));
+  const conflicting = service.review(p, source);
+  assert.equal(conflicting.status, "BLOCKED_PREREQUISITES");
+  assert.match(conflicting.limitation, /LOGIN-REQUIRED/);
+  assert.equal(conflicting.proposed_patch, null);
+});
+
 test("M13 game options are engines, not managed web; missing visual goals stay unresolved", () => {
   const p = project("PC platform."); p.profile = "digital-game-v0";
   const proposal = new SolutionService().propose(p, source);

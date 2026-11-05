@@ -5,13 +5,17 @@ const constraintTypes = ["solution_constraint", "constraint", "non_functional_re
 const negatedChoice = /do not|must not|not use|不使用|不用|禁止|不要/i;
 const localWords = /offline|本地运行|离线|local.first|local.only|on[- ]device|端侧/i;
 // Split independent assertions so a negated requirement cannot reverse a positive one in another clause.
-const clauses = (statement: string) => statement.split(/[;；。\n,，]|\bbut\b|但是|但/u);
+export const solutionClauses = (statement: string) => statement.split(/[;；。\n,，]|\bbut\b|但是|但/u);
 const negatedLocal = /(?:no|not|without|unnecessary|不需要|无需|不用|不要|禁止|非).{0,28}(?:offline|local|离线|本地|端侧)|(?:offline|local|离线|本地|端侧).{0,28}(?:not required|not needed|unnecessary|不需要|无需|不用)/i;
+const localBrowserOnly = /(?:仅在|只在|只能在|仅限(?:在|于)?|只限(?:在|于)?)\s*本地浏览器|\blocal browser[- ]only\b|\b(?:runs?|operate[sd]?)\s+(?:only|exclusively)\s+(?:in|within)\s+(?:the |a )?local browser\b/i;
+const negatedBrowserOnly = /(?:不(?:要求|需要)?|无需|并非|不是)\s*(?:仅在|只在|只能在|仅限|只限)/;
+const pageMemory = /(?:保存在|存放在|存储在|使用|采用)\s*页面内存|\b(?:store[ds]?|kept|keep|held)\b.{0,40}\b(?:in[- ]memory|(?:page|browser) memory)\b/i;
+const negatedPageMemory = /\b(?:no|not|never|without)\b|(?:不(?:应|会|必|需要|要求|能)?|无需|禁止)\s*(?:保存|存放|存储|使用|采用)/i;
 
 export function solutionBlockingInputs(project: Project): string[] {
   if (project.profile !== "digital-game-v0") return [];
   const visualKnown = confirmedSolutionInputs(project).filter((item) => item.type !== "exclusion")
-    .some((item) => clauses(item.statement).some((clause) =>
+    .some((item) => solutionClauses(item.statement).some((clause) =>
       /\b2(?:\.5)?D\b|\b3D\b|二维|三维|text[- ]only|纯文字|文字游戏|无图形/i.test(clause) &&
       !/undecided|unknown|not decided|not specified|尚未|未确定|未明确|待定|待确认|\bnot\b|\bno\b|不使用|不用|禁止|不要|比较|备选|alternative|compare|\bor\b|或者|还是/i.test(clause)));
   return visualKnown ? [] : ["游戏的 2D/3D 与画面目标尚未明确，先补问再确认引擎。"];
@@ -41,10 +45,13 @@ export function recommendSolutions(project: Project) {
   const chosen = constraints.filter((item) => item.type !== "exclusion").filter((item) => (item.tags?.some((tag) => ["technology-choice", "stack", "engine"].includes(tag)) ||
     (/use|existing|使用|采用|选用|现有/i.test(item.statement) && /react|vue|angular|node\.js|python|django|fastapi|java|spring|\.net|godot|unity|unreal|flutter|tauri|electron|postgres|mysql|sqlite/i.test(item.statement))) &&
     !/do not|must not|not use|不使用|不用|禁止|不要|比较|备选|alternative|compare/i.test(item.statement));
-  const localClauses = constraints.filter((item) => item.type !== "exclusion").flatMap((item) => clauses(item.statement))
-    .filter((clause) => localWords.test(clause) && !negatedLocal.test(clause));
+  const deploymentClauses = constraints.filter((item) => item.type !== "exclusion").flatMap((item) => solutionClauses(item.statement));
+  const localClauses = deploymentClauses.filter((clause) => localWords.test(clause) && !negatedLocal.test(clause));
   const local = localClauses.length > 0;
   const offlineOnly = localClauses.some((clause) => /local.only|offline.only|仅本地|只在本地|纯离线/i.test(clause));
+  const browserOnly = !game && deploymentClauses.some((clause) =>
+    localBrowserOnly.test(clause) && !negatedLocal.test(clause) && !negatedBrowserOnly.test(clause));
+  const browserMemory = browserOnly && deploymentClauses.find((clause) => pageMemory.test(clause) && !negatedPageMemory.test(clause));
   const unresolved = [...solutionBlockingInputs(project), recheck];
   let options: SolutionOption[];
   let recommendedIndex = 0;
@@ -56,6 +63,12 @@ export function recommendSolutions(project: Project) {
     ];
     if (/复杂3D|高保真|high.fidelity/i.test(text)) recommendedIndex = 2;
     if (/web|browser|网页|浏览器/i.test(platform)) unresolved.push("网页游戏需验证候选引擎的导出限制；必要时比较专用 Web 游戏框架。" );
+  } else if (browserOnly) {
+    const storage = browserMemory ? "数据：保存在页面内存。" : "数据：按已确认的浏览器数据保留规则处理。";
+    options = [
+      option("STATIC-BROWSER", "本地静态网页方案", `前端：HTML、CSS 和 JavaScript；部署：本地浏览器运行的静态页面；后端：无。${storage}`, "依赖和部署步骤少，适合直接验证交互。"),
+      option("BUNDLED-BROWSER", "打包后的本地静态网页方案", `前端：模块化 JavaScript 或 TypeScript；部署：打包后的静态页面在本地浏览器运行；后端：无。${storage}`, "便于组织模块与测试，但需要维护构建步骤。"),
+    ];
   } else if (mobile) {
     options = [
       option("FLUTTER", "Flutter 移动应用方案", "前端：Flutter + Dart；后端：有共享数据或服务端规则时考虑 Node.js/TypeScript；数据库：服务端 PostgreSQL 或按需求选本地存储；部署：移动应用商店与必要的服务端。", "共用客户端代码；原生能力、插件、无障碍与商店限制需验证。"),
@@ -87,7 +100,7 @@ export function recommendSolutions(project: Project) {
     else { options = [ownerOption, ...options]; recommended = ownerOption; }
     unresolved.push("用户指定技术与其余方案组成的兼容性需要核对；冲突必须回访，不能自动替换。" );
   }
-  const exclusions = constraints.flatMap((item) => clauses(item.statement)
+  const exclusions = constraints.flatMap((item) => solutionClauses(item.statement)
     .filter((clause) => item.type === "exclusion" || negatedChoice.test(clause)));
   const forbidden = (entry: SolutionOption) => exclusions.some((clause) =>
     ["Godot", "Unity", "Unreal", "React", "Vue", "Angular", "Node.js", "Python", "Django", "FastAPI", "Java", "Spring", ".NET", "Flutter", "Tauri", "Electron", "PostgreSQL", "SQLite", "IndexedDB"]
@@ -100,7 +113,7 @@ export function recommendSolutions(project: Project) {
     unresolved.push("候选受明确排除条件限制，需补充兼容技术方案。");
   }
   if (!options.some((entry) => entry.id === recommended.id)) recommended = options[0]!;
-  return {options, recommended, unresolved, local, game, mobile, desktop,
+  return {options, recommended, unresolved, local, browserOnly, browserMemory, game, mobile, desktop,
     why: chosen.length ? "优先保留用户明确确认的技术约束；适配性仍须核对。" :
       `根据已确认的平台与部署约束，建议先比较此方案；这是候选推荐，不代表已经验证性能、成本或开发支持。参考需求：${constraints.map((item) => item.id).slice(0, 12).join(", ")}。`};
 }

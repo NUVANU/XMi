@@ -1,20 +1,17 @@
-import { homedir } from "node:os";
-import { join } from "node:path";
 import { z } from "zod";
 import { createHash, randomUUID } from "node:crypto";
 import { readPending, writeRecord, sessionPattern, moduleGrantBinding, withReviewLock, nativeInterruption } from "./adapter.ts";
 import { checkReviewDisplay } from "./display-check.ts";
 import { readSingle, clearReviewCommands, reviewCommandsHash } from "./single.ts";
 import { designScopeContext, isDesignScopeExit } from "./design-scope.ts";
+import {codexReviewPaths} from "./host-paths.ts";
 
 const eventSchema = z.object({hook_event_name: z.literal("UserPromptSubmit"),
   session_id: z.string().regex(sessionPattern), turn_id: z.string().regex(sessionPattern),
   prompt: z.string().max(1024 * 1024), transcript_path: z.string().nullable().optional()});
-export const moduleReviewDirectory = () => join(homedir(), ".codex", "xmi-module-reviews");
-
 // Only the plugin's native UserPromptSubmit command invokes this against real data.
 // Tests use a separate temporary directory/database, never a live session receipt.
-export function processUserPrompt(input: unknown, directory: string, sessionDirectory = join(homedir(), ".codex", "sessions")) {
+export function processUserPrompt(input: unknown, directory: string, sessionDirectory = codexReviewPaths().sessions) {
   const event = eventSchema.parse(input);
   try { return withReviewLock(directory, event.session_id, () => processLockedPrompt(event, directory, sessionDirectory)); }
   catch (error) {
@@ -108,7 +105,8 @@ export async function runHook() {
       text += String(chunk);
       if (Buffer.byteLength(text, "utf8") > 2 * 1024 * 1024) throw new Error("INPUT_TOO_LARGE");
     }
-    const context = processUserPrompt(JSON.parse(text), moduleReviewDirectory());
+    const paths = codexReviewPaths();
+    const context = processUserPrompt(JSON.parse(text), paths.reviews, paths.sessions);
     if (context) process.stdout.write(JSON.stringify({hookSpecificOutput: {
       hookEventName: "UserPromptSubmit", additionalContext: context}}) + "\n");
   } catch {

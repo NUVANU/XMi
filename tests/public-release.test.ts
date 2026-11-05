@@ -21,6 +21,7 @@ test("public configuration generates independent Codex and generic-host routes w
   assert.equal(config.mcpServers.xmi.command,process.execPath);
   assert.equal(config.mcpServers.xmi.args[0],join(f.root,"apps/mcp-server/main.ts"));
   assert.equal(JSON.parse(readFileSync(join(record.plugin_directory,"hooks/runtime.json"),"utf8")).source_root,f.root);
+  assert.deepEqual(JSON.parse(readFileSync(join(record.plugin_directory,".mcp.json"),"utf8")).mcpServers.xmi.env_vars,["CODEX_HOME"]);
   assert.equal(existsSync(record.database),false);
   const other=f.run("workbuddy",join(f.base,"other-data"));assert.equal(other.status,0,other.stderr);
   const otherRecord=JSON.parse(other.stdout),generic=JSON.parse(readFileSync(otherRecord.configuration,"utf8"));

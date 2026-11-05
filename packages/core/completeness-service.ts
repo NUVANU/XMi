@@ -6,6 +6,7 @@ import { riskContext, unsafeExclusionItems } from "./risk-context.ts";
 import { assessFeasibility } from "./solution-feasibility.ts";
 import { solutionBlockingInputs } from "./solution-options.ts";
 import { paymentScope } from "./payment-scope.ts";
+import { explicitlyExcludesScope, hasAccountOrPrivateScope, hasExternalIntegrationScope } from "./scope-exclusions.ts";
 
 const ranks: Record<DeliveryMode, number> = {FAST_VALIDATION: 0, FAST_DEVELOPMENT: 1, PRODUCT_GRADE: 2};
 const targets: Record<DeliveryMode, "PROTOTYPE_READY" | "BUILD_READY" | "PRODUCT_SPEC_READY"> = {
@@ -107,19 +108,19 @@ const riskRules: readonly RiskRule[] = [
 function explicitNotApplicable(project: Project, key: ApplicabilityKey): boolean {
   if (key === "ALWAYS") return false;
   const tag = `profile-applicability:${key.toLowerCase()}:not-applicable`;
-  return project.items.some((item) => item.status === "CONFIRMED" && item.tags?.includes(tag));
+  return project.items.some((item) => item.status === "CONFIRMED" && (item.tags?.includes(tag) ||
+    key === "ACCOUNT_OR_PRIVATE" && explicitlyExcludesScope(item, "account") ||
+    key === "INTEGRATION" && explicitlyExcludesScope(item, "integration")));
 }
 function applicabilitySignal(project: Project, key: ApplicabilityKey): boolean {
   if (key === "ALWAYS") return true;
   const items = project.items.filter(active);
-  if (key === "ACCOUNT_OR_PRIVATE") return items.some((item) => item.type === "permission_rule" ||
-    /account|login|sign.?in|private data|tenant|role|permission|账号|登录|私有数据|租户|角色|权限/i.test(text(item)));
+  if (key === "ACCOUNT_OR_PRIVATE") return items.some(hasAccountOrPrivateScope);
   if (key === "COMMERCIAL") return items.some((item) =>
     /payment|paid|billing|price|subscription|refund|charge|quota|支付|付费|账单|价格|订阅|退款|额度/i.test(text(item)));
   if (key === "GAME_ONLINE") return items.some((item) =>
     /online|multiplayer|network|matchmaking|server|联机|多人|网络|匹配|服务器/i.test(text(item)));
-  return items.some((item) => item.type === "integration" ||
-    /integration|provider|api|email|notification|webhook|oauth|map|ai service|集成|供应商|接口|邮件|通知|地图|外部服务/i.test(text(item)));
+  return items.some(hasExternalIntegrationScope);
 }
 function applicability(project: Project, key: ApplicabilityKey): {value: Applicability; conflict: boolean} {
   if (key === "ALWAYS") return {value: "APPLICABLE", conflict: false};

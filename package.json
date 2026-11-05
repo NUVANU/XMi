@@ -1,6 +1,6 @@
 {
   "name": "xmi",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Clarify product intent through module interviews into a traceable XSpec.",
   "license": "Apache-2.0",
   "private": true,

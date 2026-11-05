@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.1
+
+- Native chat confirmation uses the active Codex home for both session logs and approval records.
+- Local browser blueprints preserve confirmed constraints on deployment, page memory and excluded services.
+- Scope checks recognize explicit account, payment and integration exclusions and still detect separately specified live behavior.
+
 ## Unreleased — risk and DOCX corrections
 
 - Removed unused DOCX CLI/sprintf-js dependency chain through an explicitly named private API-only source derivative; root audit is clean.

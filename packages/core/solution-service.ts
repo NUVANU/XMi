@@ -2,7 +2,7 @@ import type { AICapabilityProfile, Candidate, DeliveryMode, ModelResolutionRecor
 import { requireCondition } from "./errors.ts";
 import { evaluateRisk } from "./completeness-service.ts";
 import { assessFeasibility, confirmedSolutionInputs } from "./solution-feasibility.ts";
-import { recommendSolutions } from "./solution-options.ts";
+import { recommendSolutions, solutionClauses } from "./solution-options.ts";
 import { fingerprint } from "./validation.ts";
 
 export type ModelResolutionInput = {
@@ -30,6 +30,16 @@ const confirmedText = (project: Project) => confirmedSolutionInputs(project)
   .map((item) => `${item.statement} ${(item.tags ?? []).join(" ")}`);
 const first = (values: string[], re: RegExp, fallback: string) => values.find((value) => re.test(value)) ?? fallback;
 const has = (values: string[], re: RegExp) => values.some((value) => re.test(value));
+const accountSignal = /account|login|auth|permission|private|tenant|账号|登录|认证|权限|私有|租户/i;
+const integrationSignal = /integration|provider|api|oauth|payment|email|map|ai|集成|供应商|接口|支付|邮件|地图|人工智能/i;
+
+function browserScopeConflicts(project: Project): string[] {
+  const remoteBehavior = /\b(?:back[- ]?end|server[- ]side|cloud[- ]hosted|cloud sync|external (?:integrations?|providers?|services?|apis?)|oauth|payments?|user accounts?|login)\b|后端|服务端|云同步|云端(?:部署|运行|存储)|外部(?:服务|接口|\s*API)|第三方(?:服务|接口|\s*API)|账号|登录|鉴权|支付/i;
+  const excluded = /\b(?:no|not|never|without|excluded|unnecessary)\b|不(?:接入|需要|使用|含|支持|引入|部署|提供|启用)|无需|不用|不要|禁止|无(?:需|账号|登录|后端|服务端|外部|第三方|云端)/i;
+  return confirmedSolutionInputs(project).filter((item) => item.type !== "exclusion")
+    .filter((item) => solutionClauses(item.statement).some((clause) => remoteBehavior.test(clause) && !excluded.test(clause)))
+    .map((item) => item.id);
+}
 
 function modeProfile(mode: DeliveryMode, profile: Project["profile"]) {
   if (profile === "digital-game-v0") return {
@@ -128,6 +138,12 @@ export class SolutionService {
         persisted_status: null, proposed_patch: null,
         limitation: "M5 mode-risk blockers must be resolved before a blueprint can be proposed; M6 does not waive or export scoped overrides."};
     }
+    const conflicts = recommendSolutions(project).browserOnly ? browserScopeConflicts(project) : [];
+    if (conflicts.length) {
+      return {status: "BLOCKED_PREREQUISITES", feasibility, risk_blocker_ids: [], persisted_item_id: null,
+        persisted_status: null, proposed_patch: null,
+        limitation: `The confirmed local-browser-only boundary conflicts with possible remote behavior in: ${conflicts.join(", ")}. Clarify these items before proposing a blueprint.`};
+    }
     return {status: "PROPOSAL_AVAILABLE", feasibility, risk_blocker_ids: [], persisted_item_id: null,
       persisted_status: null, proposed_patch: {kind: "ADD_CANDIDATE", candidate: this.propose(project, sourceRef)},
       limitation: "This is an unconfirmed proposal. Saving it does not approve it; Owner approval or bounded delegation is a separate host-confirmed write."};
@@ -141,10 +157,11 @@ export class SolutionService {
     const mode = project.delivery_policy.effective_mode;
     const values = confirmedText(project);
     const profile = modeProfile(mode, project.profile);
-    const account = has(values, /account|login|auth|permission|private|tenant|账号|登录|认证|权限|私有|租户/i);
-    const integration = has(values, /integration|provider|api|oauth|payment|email|map|ai|集成|供应商|接口|支付|邮件|地图|人工智能/i);
     const selection = recommendSolutions(project);
-    const {options, recommended, local} = selection;
+    const {options, recommended, local, browserOnly, browserMemory} = selection;
+    requireCondition(!browserOnly || browserScopeConflicts(project).length === 0, "SOLUTION_PREREQUISITES_INCOMPLETE");
+    const account = !browserOnly && has(values, accountSignal);
+    const integration = !browserOnly && has(values, integrationSignal);
     const capability = aiProfile(project);
     const blueprintId = `BLUEPRINT-${fingerprint({project_id: project.project_id, assessment: assessment.fingerprint, mode}).slice(0, 12).toUpperCase()}`;
     let preserve = confirmedSolutionInputs(project).filter((item) => (["solution_constraint", "constraint", "non_functional_requirement", "exclusion"].includes(item.type) ||
@@ -175,22 +192,22 @@ export class SolutionService {
         blueprint_id: blueprintId, mode,
         feasibility_inputs: assessment.inputs.map((entry) => ({key: entry.key, evidence_ids: entry.evidence_ids})),
         feasibility_fingerprint: assessment.fingerprint,
-        deployment_topology: selection.game || selection.mobile || selection.desktop ? "按确认的目标设备发布客户端；只在确认了联网或共享状态需求时引入服务端。" : local ? "Local-first/browser-hosted boundary unless a confirmed integration requires a server-side component."
+        deployment_topology: browserOnly ? "静态页面仅在本地浏览器运行。" : selection.game || selection.mobile || selection.desktop ? "按确认的目标设备发布客户端；只在确认了联网或共享状态需求时引入服务端。" : local ? "Local-first/browser-hosted boundary unless a confirmed integration requires a server-side component."
           : "Web client plus a bounded application/backend boundary; deployment provider remains an implementation choice unless explicitly confirmed.",
         client_form_factor: first(assessment.inputs.find((entry) => entry.key === "TARGET_PLATFORM")!.evidence_ids.map((id) => project.items.find((item) => item.id === id)!.statement), /web|browser|mobile|desktop|pc|windows|android|ios|网页|浏览器|移动端|桌面|平台/i, project.profile === "digital-game-v0" ? "Game target platform remains unresolved." : "Web browser client form factor as defined by the supported V0 profile."),
-        backend_need: selection.game ? "后端仅在已确认的联网、账户或共享状态需求要求时引入；单机存档不自动要求服务端。" : integration || account ? "Backend boundary is required for confirmed identity, private-data or integration behavior; keep it narrow and policy-enforcing."
+        backend_need: browserOnly ? "无后端服务。" : selection.game ? "后端仅在已确认的联网、账户或共享状态需求要求时引入；单机存档不自动要求服务端。" : integration || account ? "Backend boundary is required for confirmed identity, private-data or integration behavior; keep it narrow and policy-enforcing."
           : "No backend is implied beyond confirmed persistence/integration needs; XDev may keep the prototype local where the approved mode permits.",
-        persistence_data_ownership: first(values, /persist|save|data|owner|retain|delete|保存|持久|数据|所有权|保留|删除/i,
+        persistence_data_ownership: browserMemory || first(values, /persist|save|data|owner|retain|delete|保存|持久|数据|所有权|保留|删除/i,
           "Preserve confirmed data ownership and persistence decisions; do not invent new retained data."),
-        authentication_authorization: account ? "Enforce confirmed identity, role and isolation rules at the authoritative data/service boundary."
+        authentication_authorization: browserOnly ? "沿用已确认的本地范围，无账号或服务端鉴权。" : account ? "Enforce confirmed identity, role and isolation rules at the authoritative data/service boundary."
           : "No account/authentication system is added unless the confirmed Product Model requires it.",
-        integration_boundaries: integration ? "Keep every confirmed external provider behind an explicit failure/fallback and data-sharing boundary."
+        integration_boundaries: browserOnly ? "不接入外部服务或 API。" : integration ? "Keep every confirmed external provider behind an explicit failure/fallback and data-sharing boundary."
           : "No external integration is added silently; an approved Product Model amendment is required for new external side effects.",
         ai_capability_boundary: capability ? `Provider-neutral AI capability profile ${capability.id} constrains later model resolution; it does not select a provider.`
           : "No product AI capability is confirmed; do not add an AI provider/model dependency silently.",
         reliability_privacy_constraints: first(values, /availability|recovery|privacy|security|sensitive|可用性|恢复|隐私|安全|敏感/i,
           "Reliability/privacy implementation must preserve confirmed risk and data-sensitivity boundaries; unconfirmed production assurances remain gaps."),
-        recommended_stack_profile: `${recommended.summary} ${profile.stack}`,
+        recommended_stack_profile: browserOnly ? recommended.summary : `${recommended.summary} ${profile.stack}`,
         alternatives_tradeoffs: options.map((option) => `${option.label}: ${option.summary} ${option.trade_offs.join(" ")}`).join("\n"),
         xdev_must_preserve: preserve,
         decisions_delegated_to_xdev: delegated,

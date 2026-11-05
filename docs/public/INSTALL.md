@@ -17,6 +17,8 @@ codex plugin add xmi@xmi-local --json
 
 已有同名插件时先核对来源，不覆盖原数据库。用户通过宿主原生入口审阅/信任 UserPromptSubmit 钩子，不编辑信任记录。重新连接后在真实对话启用 XMi；模型使用钩子提供的当前会话路由，不要求用户填写内部 ID。
 
+如果用独立的 `CODEX_HOME` 启动 Codex，请使用绝对路径。生成的 XMi 配置会把此路径传给 MCP 服务。钩子在同一目录下核对会话日志并保存确认凭据。
+
 完整清单作为最终聊天内容展示。真实下一条“确认好了”经钩子核验后只保存 GRANTED；模型调用 xmi_module_review_commit，再读取 CONFIRMED 与产品状态，才报告成功。暂时失败用同一绑定重试。新的人类回复（包括询问状态）使未提交授权失效；旧 MATCH 诊断不能补造批准。
 
 ## WorkBuddy

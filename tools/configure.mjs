@@ -42,7 +42,7 @@ export function configure(root,input,host,cloudConfig) {
   }
   if(host==='codex') {
     cpSync(join(root,'plugins','xmi'),output,{recursive:true});
-    writeFileSync(join(output,'.mcp.json'),JSON.stringify({mcpServers:{xmi:server}},null,2)+'\n');
+    writeFileSync(join(output,'.mcp.json'),JSON.stringify({mcpServers:{xmi:{...server,env_vars:['CODEX_HOME']}}},null,2)+'\n');
     writeFileSync(join(output,'hooks','runtime.json'),JSON.stringify({source_root:root},null,2)+'\n');
   } else {
     json('mcp.json',{mcpServers:{xmi:{...server,type:'stdio',cwd:root,disabledTools:nativeTools}}});

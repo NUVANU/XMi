@@ -1,4 +1,5 @@
 import type {Item, Project} from "../shared-types/domain.ts";
+import { explicitlyExcludesScope, withoutExplicitScopeExclusions } from "./scope-exclusions.ts";
 
 const active = (item: Item) => item.status !== "REJECTED" && item.status !== "SUPERSEDED";
 const paymentWords = /\b(?:payments?|checkout|charges?|refunds?|stripe|subscriptions?)\b|支付|付款|扣款|退款|收款|充值|内购|付费抽卡|收取(?:服务费|月费|年费)|(?:收取|执行|自动|启用|实现|开始|支持|进行|发起|本期|首期|平台|立即)(?:实际|真实)?收费/i;
@@ -23,6 +24,7 @@ function withoutInactivePayments(sentence: string, wholeOnly = false): string {
 // Only an explicit whole real-payment exclusion authorizes the narrower check.
 // A refund-only or failure-only deferral cannot switch off checkout requirements.
 function paymentExclusion(item: Item): boolean {
+  if (explicitlyExcludesScope(item, "payment")) return !paymentWords.test(currentPaymentText(item));
   if (item.type !== "exclusion" || item.status !== "CONFIRMED" || /[?？]|是否|待定/i.test(item.statement)) return false;
   const disabled = /^(?:本期|首期|当前)?\s*真实支付(?:及其配套扣款、退款与失败处理流程)?(?:功能|能力|流程)?(?:均|保持)?(?:后置|延期|关闭|禁用|排除)[。\s]*$/u.test(item.statement) ||
     /^(?:all )?(?:real|live) payments?(?: and (?:their )?(?:charges?, refunds? and failure handling))? (?:are |is )?(?:deferred|excluded|disabled)[.\s]*$/i.test(item.statement) ||
@@ -31,7 +33,7 @@ function paymentExclusion(item: Item): boolean {
 }
 
 function currentPaymentText(item: Item): string {
-  let statement = item.statement;
+  let statement = withoutExplicitScopeExclusions(item.statement);
   // A negative acceptance test is not a successful charge. Remove just its
   // rejected Given/When input; any subsequent affirmative operation stays.
   if (item.type === "acceptance_criterion") statement = statement.replace(

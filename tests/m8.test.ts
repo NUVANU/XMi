@@ -62,6 +62,26 @@ test("M8 account closure aliases are shared by audit and profile, while deletion
   }
 });
 
+test("M8 explicit local account and payment exclusions do not hide independent live requirements", () => {
+  const p = baseProject("FAST_VALIDATION");
+  const noRemote = confirmed("LOCAL-SCOPE", "integration", "不接入外部服务或 API，不需要账号、支付、云端或后端服务。");
+  p.items = [noRemote];
+  const findings = () => auditor.run(p).findings.map(row => row.category);
+  const affected = ["ACCOUNT_DELETION", "DATA_ISOLATION", "PAYMENT_FAILURE"];
+  assert.deepEqual(findings().filter(category => affected.includes(category)), []);
+  const applicability = (id: string) => completeness.evaluate(p).profile_results.find(row => row.rule_id === id)?.applicability;
+  assert.equal(applicability("identity.account-deletion"), "NOT_APPLICABLE");
+  assert.equal(applicability("commercial.payment-failure"), "NOT_APPLICABLE");
+  assert.equal(applicability("state.integration-unavailable"), "NOT_APPLICABLE");
+  assert.equal(completeness.evaluate(p).hard_gates.find(gate => gate.gate === 10)?.status, "PASS");
+
+  noRemote.statement += "但是管理员需要登录，用户通过 Stripe 支付。";
+  assert.deepEqual(findings().filter(category => affected.includes(category)).sort(), affected);
+  noRemote.statement += "同时发送邮件通知。";
+  assert.equal(applicability("state.integration-unavailable"), "UNRESOLVED");
+  assert.equal(completeness.evaluate(p).hard_gates.find(gate => gate.gate === 10)?.status, "FAIL");
+});
+
 function confirmed(id: string, type: Item["type"], statement: string, options: Partial<Item> = {}): Item {
   return {id, type, statement, status: "CONFIRMED", source_refs: [source], priority: "P1", version: 1,
     created_at: now, updated_at: now, confirmed_by: "owner", confirmed_at: now, ...options};

@@ -2,6 +2,7 @@ import test from "node:test";
 import type { TestContext } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import { spawnSync } from "node:child_process";
 import { syncBuiltinESMExports } from "node:module";
 import { appendFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -96,6 +97,41 @@ test("genuine adapter prompt fixture confirms a module atomically with source ev
   assert.match(project.items.find(item => item.id === "REQ-1")!.source_refs.at(-1)!.ref, /^codex-user-prompt:/);
   assert.match(f.prompt("确认好了"), /routing only/);
   assert.equal(f.host.status(project).status, "CONFIRMED");
+});
+
+test("native hook uses the configured Codex home for logs and grants and refuses other homes", t => {
+  const f = fixture(t);
+  const home = join(f.directory, "isolated-home");
+  const sessions = join(home, "sessions");
+  const reviews = join(home, "xmi-module-reviews");
+  fs.mkdirSync(sessions, {recursive: true});
+  const host = createModuleReviewHost(reviews, session, f.db, f.service);
+  const invoke = (prompt: string, transcript_path?: string) => {
+    const result = spawnSync(process.execPath, ["--input-type=module", "-e",
+      `import {runHook} from ${JSON.stringify(new URL("../apps/local-module-review/hook.ts", import.meta.url).href)}; await runHook();`], {
+      env: {...process.env, CODEX_HOME: home},
+      input: JSON.stringify({hook_event_name: "UserPromptSubmit", session_id: session, turn_id: turn, prompt, transcript_path}),
+      encoding: "utf8",
+    });
+    assert.equal(result.status, 0, result.stderr);
+    return JSON.parse(result.stdout).hookSpecificOutput.additionalContext as string;
+  };
+  invoke("启用 XMi");
+  const wrong = host.prepare(f.project, "技能");
+  f.display(wrong.review_text);
+  const outside = join(f.directory, "fixture-session.jsonl");
+  assert.match(invoke("确认好了", outside), /PATH_OUTSIDE_SESSIONS/);
+  assert.equal(readPending(reviews, session)?.status, "INVALIDATED");
+
+  const prepared = host.prepare(f.project, "技能");
+  f.display(prepared.review_text);
+  const transcript = join(sessions, "fixture-session.jsonl");
+  fs.copyFileSync(outside, transcript);
+  assert.match(invoke("确认好了", transcript), /xmi_module_review_commit/);
+  assert.equal(readPending(reviews, session)?.status, "GRANTED");
+  assert.equal(f.service.get(f.project.project_id).model_version, f.project.model_version);
+  host.commit(prepared.review.project_id, prepared.review.project_version, prepared.review.review_id);
+  assert.equal(host.status(f.service.get(f.project.project_id)).status, "CONFIRMED");
 });
 
 test("module hook grants without canonical writes; commit rejects forged binding and retries once", t => {

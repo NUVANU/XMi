@@ -1,60 +1,127 @@
 # XMi
 
-2026-10-18：新建本地项目时，以用户核实的项目根目录作为默认保存位置（可修改）。设计数据库与可读过程资料随项目保存在 `.xmi/`，其他 agent 从 `XMI-START-HERE.md` 读取版本、设计、决定和待办。正式 XSpec 导出到项目的 `docs/xspec/`。已有共享库项目保持原位，不自动迁移；资料文件编辑不代表产品确认。源码变化须重连 XMi 后加载。
+**Turn “I have an idea” into “this is what we agreed to build.”**
 
-2026-10-16 补充：按用户要求加入可选的本机 Codex 宿主新 Agent 规格内容评审。沿用既有模型登录和模块确认流程；原生来源核对不等于强制权限隔离，也不自动通过正式就绪门槛。普通采访及有效候选包导出不要求执行评审。见 [ADR-022](../adr/ADR-022-NATIVE-HOST-AGENT-SPEC-REVIEW.md)。
+Guided product clarification and traceable XSpec specifications for AI-assisted development.
 
-当前范围（2026-10-16）：围绕模块采访、清单确认、规格质量检查和 XSpec 交付完善现有功能。独立模型审查为可选后续能力，停止第二阶段接入，默认工具目录不展示审查原型。不要求用户配置外部审查服务才能导出。未达到正式保证的有效规格可经授权导出为 NOT_READY 候选包，清楚保留未完成项；不代表生产就绪。见 [ADR-021](../adr/ADR-021-XSPEC-CORE-SCOPE-CONVERGENCE.md)。
+**English** · [简体中文](README.zh-CN.md)
 
-**通过模块访谈，把产品想法梳理成准确、可追溯、可交接开发的 XSpec。**
+[Quick start](#quick-start) · [Architecture](docs/public/ARCHITECTURE.md) · [Known issues](docs/public/KNOWN-ISSUES.md) · [X Suite](https://github.com/NUVANU/X-Suite)
 
-当前社区版为 **V0.1**（软件包版本 `0.1.1`）。支持网页、SaaS、工具和电子游戏的产品定义。XMi 交付开发规格，开发执行由开发者或 XDev 负责。
+You should not have to know the code before you can explain the product you want. But a short prompt often leaves the AI to guess the rules, fill in missing decisions, and expand the scope.
 
-## 使用效果
+**XMi helps you make those decisions before they become code.** Discuss your idea module by module, see what is confirmed and what is still open, and export a versioned specification that another developer or agent can inspect.
 
-从一句想法或一套原有设计文档开始。XMi 围绕一个模块展示当前设定、规则表、关联背景、待定问题和建议，逐轮讨论清楚，再进入下一个模块。
+## What can XMi help you do?
 
-例如：“我想做一个多人预约工具。”讨论预约模块时，会一起呈现时段容量、取消规则、冲突处理、权限和失败反馈。未知内容保留为待定项，建议可以修改，正式采用由你确认。
+| Start with… | Work toward… |
+| --- | --- |
+| A rough idea for an app, tool, SaaS product, or game | A structured product model with scope and acceptance criteria |
+| Existing Markdown, text, DOCX, or PDF requirements | Source-linked proposals to review, rather than silently adopted facts |
+| Conflicting terms and incomplete rules | Explicit definitions, decisions, conflicts, and open questions |
+| A conversation that only makes sense to its participants | A persistent model and readable project context for the next session |
+| A polished PRD with unclear approval | An XSpec whose confirmed items, versions, and sources can be checked |
 
-- 导入 Markdown、TXT、DOCX、PDF，提取有来源的待核对条目。
-- 梳理术语、歧义、冲突、范围、数据、权限和验收条件。
-- 根据已确认约束比较技术方案；涉及成本、隐私和产品行为的决定由你确认。
-- 产品状态保存到本地 SQLite，可按项目 ID 跨对话恢复。
-- 审计缺口、编译和验证 XSpec；高分不会覆盖阻塞项。
+XMi is useful for nontechnical builders defining a first product, developers clarifying an ambiguous request, and teams handing requirements to another person or coding agent.
 
-## 快速开始
+## See the difference in a small example
 
-准备 Node **24.20.0**、npm **11.19.0**。轻量包不附 Node 或 node_modules，首次安装需要联网。已审查的 DOCX API 源码与浏览器产物随源码提供，其来源、组件和许可证见 [DOCX 依赖说明](docs/public/DOCX-DEPENDENCY.md)。
+Your starting idea:
+
+> “I want an app where neighbors can reserve shared tools.”
+
+Before implementation, XMi helps you discuss questions such as:
+
+- Can two people reserve the same tool at overlapping times?
+- Can the borrower cancel, and until when?
+- What happens if the tool becomes unavailable?
+- Which rules belong in the first release, and which should remain out of scope?
+
+Suggestions remain proposals. Undecided behavior stays open. You review the complete confirmation checklist before the corresponding decisions are adopted.
+
+This is an example of the clarification process, not a claim that XMi has already built or validated this app.
+
+## Core capabilities
+
+### Clarify by module, with the relevant context
+
+Discuss the current rules, related background, open decisions, and alternatives together. XMi separates confirmed, proposed, rejected, and unresolved items so that an AI suggestion does not silently become a product requirement.
+
+### Keep confirmation meaningful
+
+On the documented Codex path, the full checklist is shown in chat. A real user reply is checked by the native confirmation hook; the tool then commits the corresponding change and reads the stored state back. Preparing a checklist is not the same as confirming it.
+
+### Continue beyond one conversation
+
+New local projects store their authoritative model in `.xmi/xmi-state.sqlite` under the confirmed project root. `XMI-START-HERE.md` and generated context files make the current design, decisions, and pending questions easier for another agent to read. These files are derived views: editing them does not approve a decision.
+
+Older shared-database projects remain supported without automatic migration. Resume an existing project using its original project ID and data configuration.
+
+### Export an inspectable specification
+
+XMi compiles and validates **XSpec**, a versioned handoff package containing the specification, supporting documents, and integrity metadata. Audit/readiness checks expose missing coverage and blockers. A score does not override a blocker, and exporting a specification does not authorize development.
+
+The current XDev handoff contract uses a 16-file package with manifest/content hashes. See [handoff details](docs/public/XDEV-HANDOFF.md).
+
+## Quick start
+
+Current public source: **V0.1 community line · package `0.1.1` · Apache-2.0**.
+
+Use **Node.js 24.20.0** and **npm 11.19.0**. Clone this repository or download its source, then run the following from its root:
 
 ```sh
 npm ci --omit=dev --ignore-scripts
 npm run check
+npm run configure -- --host codex --data-dir "C:/XSuite/xmi-data"
 ```
 
-自检只操作独立临时测试数据，模拟 MCP 表单；PASS 不等于宿主界面已验收。
+Choose an absolute local data directory outside the XMi installation. The configuration helper returns a `plugin_directory`; add it through the host-supported local plugin entry point, review the native hooks, and start a new connection. The helper refuses to overwrite an existing configuration or take over an existing database.
 
-| 宿主 | 配置命令 | 确认机制 |
-| --- | --- | --- |
-| Codex 本机 | `npm run configure -- --host codex --data-dir <本地绝对目录>` | 信任原生钩子后，完整清单展示、真实回复、受控提交与回读 |
-| WorkBuddy | `npm run configure -- --host workbuddy --data-dir <本地绝对目录>` | 通用 MCP；正式采用依赖宿主的 MCP 确认表单 |
+**Complete setup:** [installation, hook trust, resume, and upgrade](docs/public/INSTALL.md). Node.js and dependencies are not bundled; first-time dependency installation needs network access. The self-check uses temporary synthetic data and does not establish real-host or human acceptance.
 
-将路径换成你自己选择、位于 XMi 安装目录外的目录；路径有空格时加引号。工具拒绝覆盖已有配置或数据库。生成结果位于 `.xmi-install/<宿主>/`，通过宿主支持的入口导入并完成信任；生成配置不等于已连接。[完整安装指南](docs/public/INSTALL.md)
+After connecting, try:
 
-开始对话：
+```text
+Use XMi to clarify my product idea with me, one module at a time.
+Show current decisions, relevant background, open questions, and suggestions.
+Keep undecided behavior open. Before adopting changes, display the full
+confirmation checklist in chat.
+```
 
-> 启用 XMi，帮我把产品想法按模块讨论。先展示当前设定、关联背景、待定项和建议，一起讨论清楚后整理成 XSpec。
+A WorkBuddy configuration entry is also available via `--host workbuddy`. Its actual form/Skill behavior and clean-host installation require separate validation; see [platform status](docs/public/PLATFORMS.md). This public distribution does not provide a hosted ChatGPT web/mobile service.
 
-继续项目时提供原项目 ID，沿用原数据库配置。
+## Technical design
 
-## 平台与数据
+| Layer | Responsibility |
+| --- | --- |
+| Skills + MCP | Guide the conversation and expose structured project operations |
+| Domain services + validated schemas | Maintain the authoritative product model and state transitions |
+| Local SQLite | Store product state, events, and receipts transactionally |
+| Confirmation adapters | Bind a displayed review to the applicable real confirmation flow |
+| XSpec compiler and validators | Produce a versioned handoff and check references, coverage, and integrity |
 
-Codex 原生模块确认已有一次真实的 16 项成功回读；所有异常恢复和并发情形尚未完成宿主验收。WorkBuddy 实际安装、表单能力及完整访谈待社区测试。遇到 CONSENT_UNAVAILABLE，应保留讨论并反馈，不能声称正式确认成功。[平台范围](docs/public/PLATFORMS.md)
+The Codex confirmation path separates a granted reply from the domain commit. If a write has already committed but a later receipt step fails, recovery uses the original receipt rather than creating a second batch. Project context files carry version/hash information so stale derived files are distinguishable.
 
-ChatGPT 手机端不能安装此本地 STDIO 包；本次公开源码不附私人云端服务。XMem 可选，使用 XMi 不要求安装它。
+For implementation details, see [architecture](docs/public/ARCHITECTURE.md), [project-local storage](docs/adr/ADR-023-PROJECT-LOCAL-DESIGN-DATA.md), and [scope decisions](docs/adr/ADR-021-XSPEC-CORE-SCOPE-CONVERGENCE.md).
 
-提案与正式确认分开，确认保留来源。导入文件由用户保管，XMi 保留提取条目、来源位置和文件摘要；宿主及模型的数据处理设置另行适用。包内不含作者的真实项目、私人聊天、数据库、密钥或机器配置。[隐私与安全](SECURITY.md)
+## How XMi fits into X Suite
 
-## 开发与反馈
+- **XMi:** clarify and preserve product intent; produce XSpec.
+- **XDev:** govern development scope and evaluate implementation/Review/QA evidence.
+- **XMem:** preserve and retrieve versioned engineering history.
+- **Your host and model:** write code, run tools, and manage agent execution.
+
+XMi works without XMem. Its canonical product model is not delegated to a memory summary. For the combined local workflow, see [X Suite](https://github.com/NUVANU/X-Suite).
+
+## Status, privacy, and limitations
+
+The published platform record includes one genuine Codex 16-item confirmation-and-readback success path, not exhaustive host-level failure/concurrency acceptance. The new public configuration helper still needs clean-host acceptance. Linux/macOS host use and WorkBuddy’s full flow are not established by that result.
+
+Risk matching is deterministic review assistance and may need clarification for ambiguous or mixed-scope text. Independent content review and actual XDev/XUi consumer acceptance remain separate from local schema/contract checks. See [known issues](docs/public/KNOWN-ISSUES.md) and [platform evidence](docs/public/PLATFORMS.md).
+
+Product data is stored locally on the documented path. Your host/model may still transmit conversation or tool context to its provider. Import only material you are authorized to use; keep secrets and private project data out of public issues. See [security policy](SECURITY.md).
+
+## Develop and contribute
 
 ```sh
 npm ci --ignore-scripts
@@ -64,8 +131,8 @@ npm test
 npm run check
 ```
 
-[架构概览](docs/public/ARCHITECTURE.md) · [贡献指南](CONTRIBUTING.md) · [更新记录](CHANGELOG.md)
+See [contributing](CONTRIBUTING.md), [changelog](CHANGELOG.md), and [DOCX dependency notes](docs/public/DOCX-DEPENDENCY.md). For [issues](https://github.com/NUVANU/XMi/issues), include the version/commit, host, minimal steps, and redacted error output.
 
-报告问题请包含版本、宿主、步骤和脱敏错误码，不要上传密钥、真实设计文件或数据库。社区版源码包不包含作者本机 Git 历史和私人试用证据。早期设计/工程文档为历史参考，当前行为以源码、测试和发行说明为准。[已知问题](docs/public/KNOWN-ISSUES.md)包括风险范围误匹配及混合条目排除语义；不能用批量排除绕过。独立审查及真实 XUi/XDev 消费端验收仍有未完成项，生产环境使用前应按目标宿主验证。
+## License
 
-许可证：[Apache-2.0](LICENSE)。项目：[NUVANU/XMi](https://github.com/NUVANU/XMi)。
+[Apache License 2.0](LICENSE). Third-party components retain their own licenses.

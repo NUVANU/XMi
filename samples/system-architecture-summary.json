@@ -1,0 +1,13 @@
+{
+  "format": "XMI-SYSTEM-ARCHITECTURE/1",
+  "project_id": "XMI-TEST-ONLY-ARCHITECTURE-SAMPLE",
+  "model_version": 1,
+  "source_model_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "state": "READY_FOR_REVIEW",
+  "chapter_count": 24,
+  "pending_count": 0,
+  "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+  "context_relative_path": ".xmi/context/architecture.md",
+  "package_path": "TECHNICAL-SOLUTION-BLUEPRINT.md",
+  "requires_document_confirmation": false
+}

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.2 (2026-11-13)
+
+- Consolidates the installed incremental-confirmation and issue-handling workflow. The default complete-list reply is 确认; a handling reply confirms its chosen actions. Unchanged facts and dispositions are reused.
+- Generates the version-bound 24-chapter system architecture document after solution confirmation and before full independent content review, with no extra document confirmation.
+- Recognizes recharge failure handling without altering the original product rule.
+- Restores the configured-Codex-home hook route and confirmed local-browser/page-memory solution boundaries. Negative, undecided and conflicting constraints remain subject to review.
+- The release manifest records actual acceptance and release status separately from this version number. Packaging is local; no public registry or hosted service is published.
+
 ## 0.1.1
 
 - Native chat confirmation uses the active Codex home for both session logs and approval records.

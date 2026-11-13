@@ -56,9 +56,9 @@ function fixture(t: TestContext) {
   const router = createSingleReviewRouter(directory, db, undefined, service);
   const prompt = (text: string, id = session) => processUserPrompt({hook_event_name:"UserPromptSubmit", session_id:id, turn_id:turn,
     prompt:text, transcript_path:process.platform === "win32" ? toNamespacedPath(log) : log}, directory, directory);
-  const display = (text: string) => writeFileSync(log, JSON.stringify({type:"session_meta", payload:{id:session}}) + "\n" +
+  const display = (text: string, reply = "确认好了") => writeFileSync(log, JSON.stringify({type:"session_meta", payload:{id:session}}) + "\n" +
     JSON.stringify({type:"response_item", payload:{type:"message", role:"assistant", phase:"final_answer", content:[{type:"output_text",text}]}}) + "\n" +
-    JSON.stringify({type:"response_item", payload:{type:"message", role:"user", content:[{type:"input_text",text:"确认好了\n"}]}}) + "\n");
+    JSON.stringify({type:"response_item", payload:{type:"message", role:"user", content:[{type:"input_text",text:reply+"\n"}]}}) + "\n");
   prompt("继续");
   const args = (project = service.get(p.project_id), itemId = project.items[0]!.id) => {const item = project.items.find(item=>item.id===itemId)!;
     return {operation:"xmi_item_confirm" as const, schema_version:"0.1.0" as const, project_id:project.project_id,
@@ -67,6 +67,13 @@ function fixture(t: TestContext) {
   const commit = () => {const record = readSingle(directory,session)!; return router.commit(record.project_id,record.project_version,record.review_id,session);};
   return {directory,db,log,store,service,p,router,prompt,display,args,commit};
 }
+
+test("single-action lists suggest and apply the exact unified confirmation reply",t=>{
+  for(const reply of ["确认","确认。","确认好了"]){const f=fixture(t),prepared=f.router.prepare(f.p,f.args(),session);
+    assert.equal(prepared.reply,"确认");assert.match(prepared.review_text,/请回复“确认”/);assert.doesNotMatch(prepared.review_text,/确认好了/);
+    f.display(prepared.review_text,reply);assert.match(f.prompt(reply),/尚未正式写入/);f.commit();
+    assert.equal(f.service.get(f.p.project_id).items[0]!.status,"CONFIRMED");}
+});
 
 function seedBlueprint(f: ReturnType<typeof fixture>, copies = 1): {project: Project; candidate: Candidate} {
   let p = f.service.get(f.p.project_id);

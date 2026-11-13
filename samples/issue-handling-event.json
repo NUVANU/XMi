@@ -1,0 +1,10 @@
+{
+  "kind": "ITEM_TEXT_REVISED",
+  "item_id": "AC-EXAMPLE",
+  "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000",
+  "statement": "Synthetic example only: invalid input creates no saved note and shows feedback.",
+  "owner_action": {
+    "intent": "REVISE_TEXT",
+    "source_ref": {"type": "owner_action", "ref": "fixture:TEST_ONLY-issue-handling-example"}
+  }
+}

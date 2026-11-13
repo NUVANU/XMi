@@ -1,14 +1,17 @@
+import {codexReviewPaths} from "./host-paths.ts";
 import { z } from "zod";
 import { createHash, randomUUID } from "node:crypto";
 import { readPending, writeRecord, sessionPattern, moduleGrantBinding, withReviewLock, nativeInterruption } from "./adapter.ts";
 import { checkReviewDisplay } from "./display-check.ts";
-import { readSingle, clearReviewCommands, reviewCommandsHash } from "./single.ts";
+import { readSingle, clearReviewCommands, reviewCommandsHash, handledCommands } from "./single.ts";
+import {parseIssueReply,issueHandlingSummary} from "../../packages/core/issue-handling.ts";
 import { designScopeContext, isDesignScopeExit } from "./design-scope.ts";
-import {codexReviewPaths} from "./host-paths.ts";
 
 const eventSchema = z.object({hook_event_name: z.literal("UserPromptSubmit"),
   session_id: z.string().regex(sessionPattern), turn_id: z.string().regex(sessionPattern),
   prompt: z.string().max(1024 * 1024), transcript_path: z.string().nullable().optional()});
+export const moduleReviewDirectory = () => codexReviewPaths().reviews;
+
 // Only the plugin's native UserPromptSubmit command invokes this against real data.
 // Tests use a separate temporary directory/database, never a live session receipt.
 export function processUserPrompt(input: unknown, directory: string, sessionDirectory = codexReviewPaths().sessions) {
@@ -46,10 +49,13 @@ function processReviewPrompt(event: z.infer<typeof eventSchema>, directory: stri
     }
     const reply = event.prompt.trim();
     const finish = (status: "INVALIDATED" | "FAILED") => writeRecord(directory, event.session_id + ".single",
-      {...single, command: null, status, turn_id: event.turn_id});
-    if (single.session_id !== event.session_id || !["确认好了", "确认好了。", "确认这条 " + single.review_id, "确认清单 " + single.review_id].includes(reply)) {
+      {...clearReviewCommands(single), status, turn_id: event.turn_id});
+    const ordinary=["确认", "确认。", "确认好了", "确认好了。", "确认这条 " + single.review_id, "确认清单 " + single.review_id].includes(reply);
+    const choices=single.issue_handling?parseIssueReply(ordinary?"确认":reply,single.issue_handling.context.issues.length):null;
+    if (single.session_id !== event.session_id || (single.issue_handling?!choices:!ordinary)) {
       finish("INVALIDATED");
-      return singleRouting + "\nXMi 上一份确认清单已失效；本次回复没有批准任何内容。按修改重新展示完整清单。";
+      return singleRouting + (single.issue_handling?"\nXMi 本次处理表达未能明确对应清单项目，没有自动采用。只澄清未识别的处理方式，不增加确认报告或确认审核完成的步骤。"
+        :"\nXMi 上一份确认清单已失效；本次回复没有批准任何内容。按修改重新展示完整清单。");
     }
     if (reviewCommandsHash(single) !== single.command_hash) {
       finish("INVALIDATED");
@@ -63,8 +69,13 @@ function processReviewPrompt(event: z.infer<typeof eventSchema>, directory: stri
       return singleRouting + "\nXMi 确认清单未能核验，没有写入。诊断码：" + display.reason + "; 保留原稿并检查实际日志交付，不要回退弹窗或反复要求确认。";
     }
     const source = {type: "owner_action" as const, ref: "codex-user-prompt:" + event.session_id + ":" + event.turn_id + ":" + createHash("sha256").update(reply).digest("hex")};
-    writeRecord(directory, event.session_id + ".single", {...single, status: "GRANTED", turn_id: event.turn_id,
+    const handled=choices?handledCommands(single,choices):undefined;
+    writeRecord(directory, event.session_id + ".single", {...single,...(handled?{commands:handled.commands}:{}),
+      ...(handled?{command_hash:reviewCommandsHash({...single,commands:handled.commands}),issue_handling:{...single.issue_handling!,choices:handled.choices}}:{}),status: "GRANTED", turn_id: event.turn_id,
       native_epoch: nativeInterruption(directory, event.session_id), grant_source_ref: source});
+    if(handled){const summary=issueHandlingSummary(handled.choices);
+      return singleRouting+`\nXMi 已记录真实用户处理决定：采纳${summary.applied}项、修改${summary.revised}项、忽略${summary.ignored}项、暂缓${summary.deferred}项、待澄清${summary.unresolved}项。处理本身就是确认。调用 xmi_item_review_commit：project_id=${single.project_id}, expected_version=${single.project_version}, review_id=${single.review_id}, session_id=${event.session_id}。直接应用能确定的项目并自动审核；只补问未明确项，不要再要求确认清单。`;
+    }
     return singleRouting + `\nXMi 已核验真实用户确认，尚未正式写入。调用 xmi_item_review_commit：project_id=${single.project_id}, expected_version=${single.project_version}, review_id=${single.review_id}, session_id=${event.session_id}。成功后读取 canonical state 核实；保存提案仍为 PROPOSED。不要再次要求用户批准。`;
   }
   if (single?.status === "GRANTED") {
@@ -78,7 +89,7 @@ function processReviewPrompt(event: z.infer<typeof eventSchema>, directory: stri
   if (!pending || pending.status !== "PENDING") return singleRouting;
   if (pending.session_id !== event.session_id) return "XMi 确认未执行：会话不匹配。";
   const reply = event.prompt.trim();
-  const approved = ["确认好了", "确认好了。", "确认模块 " + pending.review.review_id].includes(reply);
+  const approved = ["确认", "确认。", "确认好了", "确认好了。", "确认模块 " + pending.review.review_id].includes(reply);
   if (!approved) {
     writeRecord(directory, event.session_id, {...pending, status: "INVALIDATED", turn_id: event.turn_id});
     return routing + "\nXMi 上一份模块确认清单已失效；本次回复没有批准任何条目。按用户修改重新保存草稿并展示新清单。";

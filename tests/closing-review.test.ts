@@ -14,7 +14,7 @@ import {inputs, outputs} from "../apps/mcp-server/contracts.ts";
 import {createSingleReviewRouter, readSingle} from "../apps/local-module-review/single.ts";
 import {createModuleReviewHost} from "../apps/local-module-review/adapter.ts";
 import {processUserPrompt} from "../apps/local-module-review/hook.ts";
-import {ProjectService} from "../packages/core/project-service.ts";
+import {ProjectService, replay} from "../packages/core/project-service.ts";
 import {SqliteProjectStore} from "../packages/storage/sqlite.ts";
 import {InterviewService} from "../packages/core/interview-service.ts";
 import {SolutionService} from "../packages/core/solution-service.ts";
@@ -25,10 +25,14 @@ import {DomainError} from "../packages/core/errors.ts";
 
 const session = "00000000-0000-4000-8000-000000000001", turn = "00000000-0000-4000-8000-000000000002";
 const source = {type: "conversation_turn" as const, ref: "fixture:closing-review"};
-function fixture(t: TestContext) {
+function fixture(t: TestContext, withBlueprint = true) {
   const directory = mkdtempSync(join(tmpdir(), "xmi-closing-review-")), db = join(directory, "product.sqlite"), log = join(directory, "session.jsonl");
   const store = new SqliteProjectStore(db), service = new ProjectService(store), seed = reviewProjectService();
-  const p = seed.project; store.transaction(tx => {for (const event of seed.service.history(p.project_id)) tx.append(event); tx.save(p);}); seed.store.close();
+  const seededEvents = seed.service.history(seed.project.project_id);
+  const events = withBlueprint ? seededEvents : seededEvents.filter(event => event.command.kind !== "SOLUTION_BLUEPRINT_APPROVED" &&
+    !(event.command.kind === "CANDIDATE_EXTRACTED" && event.command.candidate.type === "solution_blueprint"));
+  const p = withBlueprint ? seed.project : replay(events);
+  store.transaction(tx => {for (const event of events) tx.append(event); tx.save(p);}); seed.store.close();
   const router = createSingleReviewRouter(directory, db, undefined, service);
   const prompt = (text: string) => processUserPrompt({hook_event_name: "UserPromptSubmit", session_id: session, turn_id: turn,
     prompt: text, transcript_path: log}, directory, directory);
@@ -48,6 +52,15 @@ function fixture(t: TestContext) {
   return {directory, db, service, p, router, prompt, display, run, add, args, prepare, commit};
 }
 
+test("finalization batch uses the unified confirmation reply without accepting qualified blanket assent",t=>{
+  const f=fixture(t);f.add("REQ-UNIFIED");const prepared=f.prepare([f.args("REQ-UNIFIED")]);
+  assert.equal(prepared.reply,"确认");assert.match(prepared.review_text,/全部同意请回复“确认”/);
+  f.display(prepared.review_text);f.prompt("确认");f.commit();
+  assert.equal(f.service.get(f.p.project_id).items.find(i=>i.id==="REQ-UNIFIED")?.status,"CONFIRMED");
+  f.add("REQ-QUALIFIED");f.display(f.prepare([f.args("REQ-QUALIFIED")]).review_text);f.prompt("确认，但还要修改");
+  assert.throws(f.commit,/NATIVE_OWNER_REPLY_REQUIRED/);
+});
+
 test("ordinary settings and a selected structured option share one complete review and one genuine confirmation", t => {
   const f = fixture(t); f.add("REQ-CLOSE-A"); f.add("REQ-CLOSE-B", "另一条完整规则，不能截断。");
   const decision = new InterviewService().analyzeAnswer(f.service.get(f.p.project_id), "用户进入游戏。玩家控制主角。", source).review_decisions
@@ -66,6 +79,31 @@ test("ordinary settings and a selected structured option share one complete revi
   assert.ok(applied.every(e => e.actor === "owner" && "owner_action" in e.command && /^codex-user-prompt:/u.test(e.command.owner_action.source_ref.ref)));
   f.commit(); assert.equal(f.service.history(f.p.project_id).length, events + 3);
   assert.equal(readSingle(f.directory, session)!.commands, null);
+});
+
+test("a later review approves only the new action and reuses prior Owner decisions", t => {
+  const f = fixture(t);
+  const original = "Prior scope wording already approved.";
+  f.add("REQ-CLOSE-PRIOR", original);
+  f.display(f.prepare([f.args("REQ-CLOSE-PRIOR")]).review_text);
+  f.prompt("确认好了");
+  f.commit();
+  const prior = f.service.get(f.p.project_id).items.find(i => i.id === "REQ-CLOSE-PRIOR");
+
+  f.add("REQ-CLOSE-NEW", "A new scoped rule for this revision.");
+  const events = f.service.history(f.p.project_id).length;
+  const duplicate = {...f.args("REQ-CLOSE-PRIOR"), idempotency_key: "repeat-prior-confirmation"};
+  assert.throws(() => f.prepare([duplicate, f.args("REQ-CLOSE-NEW")]), /ALREADY_CONFIRMED/);
+  const prepared = f.prepare([f.args("REQ-CLOSE-NEW")]);
+  assert.ok(!prepared.review_text.includes(original));
+  f.display(prepared.review_text);
+  f.prompt("确认好了");
+  f.commit();
+
+  const items = f.service.get(f.p.project_id).items;
+  assert.deepEqual(items.find(i => i.id === "REQ-CLOSE-PRIOR"), prior);
+  assert.equal(items.find(i => i.id === "REQ-CLOSE-NEW")?.status, "CONFIRMED");
+  assert.equal(f.service.history(f.p.project_id).length, events + 1);
 });
 
 test("scope adoption can precede its explicit risk disposition without weakening the scope confirmation gate", t => {
@@ -178,5 +216,75 @@ test("MCP exposes a closed single-or-batch contract, uses no form, and refuses f
   assert.equal(value.ok, true); assert.equal(value.data.action, "BATCH"); f.display(value.data.review_text); f.prompt("确认好了");
   const committed = await client.callTool({name: "xmi_item_review_commit", arguments: {schema_version: "0.1.0", project_id: p.project_id,
     expected_version: p.model_version, session_id: session, review_id: value.data.review_id}});
-  assert.equal((committed.structuredContent as {ok: boolean}).ok, true);
+  const receipt = committed.structuredContent as {ok: boolean; data: Record<string, unknown>};
+  assert.equal(receipt.ok, true);
+  assert.equal(receipt.data.post_commit_validation, undefined);
 });
+
+for (const withBlueprint of [true, false]) {
+  test(`final native batch reports application and same-turn validation (blueprint=${withBlueprint})`, async t => {
+    const f = fixture(t, withBlueprint);
+    f.add("REQ-FINAL");
+    const before = f.service.get(f.p.project_id);
+    const priorItems = before.items.filter(item => item.status === "CONFIRMED");
+    const beforeEvents = f.service.history(before.project_id).length;
+    const server = createXmiServer(f.service, {singleReview: f.router});
+    const client = new Client({name: "finalization-fixture", version: "1"}, {capabilities: {}});
+    const [a, b] = InMemoryTransport.createLinkedPair();
+    await server.connect(a);
+    await client.connect(b);
+    t.after(async () => {await client.close(); await server.close();});
+    const binding = {schema_version: "0.1.0", project_id: before.project_id, expected_version: before.model_version, session_id: session};
+    const request = f.args("REQ-FINAL");
+    const args = {...binding, requests: [request], validate_after_commit: true};
+    const validate = new Ajv2020({strict: false, validateFormats: false}).compile(toolDescriptors.find(tool => tool.name === "xmi_item_review_prepare")!.inputSchema);
+    assert.ok(validate(args));
+    assert.equal(validate({schema_version: "0.1.0", session_id: session, request, validate_after_commit: true}), false);
+    const prepared = await client.callTool({name: "xmi_item_review_prepare", arguments: args});
+    assert.ok(outputs.xmi_item_review_prepare.safeParse(prepared.structuredContent).success);
+    const {data} = prepared.structuredContent as {data: {review_id: string; review_text: string}};
+    assert.match(data.review_text, /同一轮自动校验写入后的版本/u);
+    type Receipt = {model_version: number; post_commit_validation: {ok: true; data: {model_version: number;
+      validation: {package_valid: boolean}}} | {ok: false; error: {code: string}}};
+    const commit = async () => {
+      const result = await client.callTool({name: "xmi_item_review_commit", arguments: {...binding, review_id: data.review_id}});
+      assert.ok(outputs.xmi_item_review_commit.safeParse(result.structuredContent).success);
+      return result.structuredContent as {ok: true; data: Receipt} | {ok: false};
+    };
+    const unauthorized = await commit();
+    assert.equal(unauthorized.ok, false);
+    assert.equal(f.service.history(before.project_id).length, beforeEvents);
+    f.display(data.review_text);
+    f.prompt("确认好了");
+    const committed = await commit();
+    assert.ok(committed.ok);
+    const receipt = committed.data;
+    assert.equal(receipt.model_version, before.model_version + 1);
+    const validation = receipt.post_commit_validation;
+    if (withBlueprint) {
+      assert.ok(validation.ok);
+      assert.equal(validation.data.model_version, receipt.model_version);
+      assert.equal(validation.data.validation.package_valid, true);
+    } else {
+      assert.ok(!validation.ok);
+      assert.equal(validation.error.code, "XSPEC_BLUEPRINT_REQUIRED");
+    }
+    assert.equal(readSingle(f.directory, session)?.status, "APPLIED");
+    const after = f.service.get(before.project_id);
+    assert.equal(after.items.find(item => item.id === "REQ-FINAL")?.status, "CONFIRMED");
+    assert.deepEqual(after.items.filter(item => priorItems.some(prior => prior.id === item.id)), priorItems);
+    assert.equal(f.service.history(before.project_id).length, beforeEvents + 1);
+    const retried = await commit();
+    assert.equal(retried.ok, true);
+    assert.equal(f.service.history(before.project_id).length, beforeEvents + 1);
+
+    f.add("REQ-AFTER-FINAL");
+    const stale = await commit();
+    assert.ok(stale.ok);
+    const staleReceipt = stale.data;
+    assert.equal(staleReceipt.model_version, receipt.model_version);
+    assert.ok(!staleReceipt.post_commit_validation.ok);
+    assert.equal(staleReceipt.post_commit_validation.error.code, "PROJECT_VERSION_CONFLICT");
+    assert.equal(f.service.history(before.project_id).length, beforeEvents + 2);
+  });
+}

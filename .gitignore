@@ -28,3 +28,13 @@ _e2e/
 *.sqlite-wal
 *.sqlite-shm
 *.jsonl
+
+# Never publish personal host state or product data
+.codex/
+.xmi-install/
+.env
+.env.*
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.jsonl

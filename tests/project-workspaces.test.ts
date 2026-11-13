@@ -70,6 +70,14 @@ test("creation in an existing engineering folder uses local canonical state and 
   assert.equal((await f.create()).data.project_id, created.data.project_id);
 });
 
+test("an existing generated guide without an architecture entry remains idempotently usable",async t=>{
+  const f=await fixture(t),created=await f.create(),id=created.data.project_id;
+  const oldGuide=projectGuide(id,false);writeFileSync(join(f.folder,"XMI-START-HERE.md"),oldGuide);
+  const repeated=await f.create();assert.equal(repeated.ok,true);assert.equal(repeated.data.project_id,id);
+  assert.equal(readFileSync(join(f.folder,"XMI-START-HERE.md"),"utf8"),oldGuide);
+  const binding=f.manager.resolve(id)!;try{assert.equal(binding.service.history(id).length,1);}finally{binding.close();}
+});
+
 test("new project missing location, cancellation and conflicting files never fall back to the shared store", async t => {
   const f = await fixture(t);
   assert.equal((await call(f.client, "xmi_project_create", idea)).error.code, "PROJECT_DIRECTORY_REQUIRED"); assert.equal(f.approvals(), 0);

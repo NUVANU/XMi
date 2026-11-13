@@ -1,21 +1,12 @@
-XMi 本地轻量版 — 2026-10-26
+XMi V0.1.2 — 2026-11-13
 
-这是本地 MCP 插件安装包，包含当前源码、Codex 插件与 WorkBuddy Skill，不是独立桌面程序。
-已包含 R3 规格收尾、模块批量确认、项目内设计数据与 2026-10-26 支付否定句误判修复。
+这是本地 Skills + MCP 源码，不是独立桌面程序。
+准备 Node 24.20.0 / npm 11.19.0，进入仓库根目录执行：
+  npm ci --omit=dev --ignore-scripts
+  npm run check
 
-1. 完整解压到长期保留的新目录。升级时保留旧安装，先备份原数据，不覆盖运行中的数据库。
-2. 准备 Node 24.20.0、npm 11.19.0；在解压目录打开终端执行：
-   npm ci --omit=dev --ignore-scripts
-   npm run check
-   本包不附 Node/node_modules；首次安装依赖通常需要网络，不会静默修改宿主信任。
-3. 新安装选择宿主及独立的本地索引目录（替换示例路径）：
-   npm run configure -- --host codex --data-dir "D:/XMi-local-index"
-   或：npm run configure -- --host workbuddy --data-dir "D:/XMi-workbuddy-index"
-4. 按返回路径及 docs/public/INSTALL.md，把配置/插件导入宿主。Codex 用户需在宿主内信任原生用户回复钩子。
-   不要把整个源码安装包当成一个 Skill；WorkBuddy 两个 Skill ZIP 位于 workbuddy-skills/。
-5. 新项目在对话中说“启用 XMi”，提供实际项目根目录。设计数据库与过程信息随该项目保存到 .xmi/，XSpec 导出到 docs/xspec/。
-   已有项目保留原配置及数据库，不会自动迁移。首次配置助手拒绝接管已有数据库，升级请按安装指南保留原数据路由。
+新安装与升级分别按 docs/public/INSTALL.md 操作。已有数据需备份并保留原路由，不覆盖运行中的数据库；新连接后核对实际版本。不要通过编辑信任记录跳过宿主原生信任入口。
 
-测试范围：源码回归及本地包检查以包外 PACKAGE-VERIFICATION.json 为准。WorkBuddy 实际界面和确认表单仍须接收端测试。
-已知限制：偶发存储错误尚有未定根因；正式就绪门槛、Owner 确认与来源规则保留。
-不含私人云端地址/凭据、真实项目数据或运行库。共享导入所需的可选远程适配库不代表已连接或授权云端。
+默认确认回复为“确认”，旧回复兼容。只列本次待处理项，未变化的已确认内容沿用。方案确认后自动生成同版 24 章架构，并按支持宿主的已有能力进行建议性独立内容评审。导出仍需对确切包取得授权。
+
+详细功能与中英文切换见 README.md / README.zh-CN.md；当前验收范围见 docs/public/PLATFORMS.md。GitHub 源码不附 node_modules、真实产品数据库、私人聊天或机器配置。

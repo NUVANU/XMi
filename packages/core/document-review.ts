@@ -3,6 +3,7 @@ import type {Project} from "../shared-types/domain.ts";
 import type {ReviewBundle} from "./spec-review-service.ts";
 import {canonical} from "./validation.ts";
 import {requireCondition} from "./errors.ts";
+import {ARCHITECTURE_LEGACY_MARKER, ARCHITECTURE_PACKAGE_FILE} from "./system-architecture.ts";
 
 const text = (max: number) => z.string().min(1).max(max).refine(s => /\S/u.test(s));
 const evidence = z.strictObject({file_path: text(200), quote: text(1000)});
@@ -25,6 +26,8 @@ export const documentReviewStatusSchema = z.strictObject({schema_version: z.lite
   findings: z.array(documentFindingSchema).max(20), total_findings: z.number().int().nonnegative(), next_offset: z.number().int().nonnegative().nullable(),
   questions: documentReviewResponseSchema.shape.questions, follow_up_refs: documentReviewResponseSchema.shape.follow_up_refs,
   notes: documentReviewResponseSchema.shape.notes,
+  handled_findings:z.array(z.strictObject({id:text(100),action:z.enum(["IGNORE","DEFER"])})).max(100).optional(),
+  total_reported_findings:z.number().int().nonnegative().optional(),handled_question_count:z.number().int().nonnegative().optional(),
   host_job: z.strictObject({task_name: text(100), fork_turns: z.literal("none"), message: text(12000),
     material_bytes: z.number().int().nonnegative(), packet_sha256: z.string().regex(/^[a-f0-9]{64}$/u)}).nullable(), reason: text(1000)});
 export type DocumentReviewStatus = z.infer<typeof documentReviewStatusSchema>;
@@ -42,10 +45,14 @@ export function documentReviewMaterial(bundle: ReviewBundle, interviewModule?: s
       (linked.has(i.id) || i.links?.some(id => selected.has(id))));
     const render = (items: typeof core) => items.map(i => `## ${i.id} (${i.status}, v${i.version})\n\n${i.statement}`).join("\n\n");
     documents = [{path: "MODULE-REVIEW.md", content: `# ${interviewModule}\n\n${render(core)}\n\n# 直接关联设定\n\n${render(related)}`}];
-    documents.push(...files.filter(f => ["PRODUCT-VISION.md", "TECHNICAL-SOLUTION-BLUEPRINT.md", "READINESS-REPORT.md"].includes(f.path)));
+    // Module-only review keeps its old bounded common technical context. Full
+    // finalization review below receives the complete current architecture.
+    documents.push(...files.filter(f => ["PRODUCT-VISION.md", ARCHITECTURE_PACKAGE_FILE, "READINESS-REPORT.md"].includes(f.path))
+      .map(f => ({path:f.path,content:f.path === ARCHITECTURE_PACKAGE_FILE && f.content.includes(ARCHITECTURE_LEGACY_MARKER)
+        ? f.content.split(ARCHITECTURE_LEGACY_MARKER)[1]! : f.content})));
   } else documents = files.map(({path, content}) => ({path, content}));
   return {project_id: p.project_id, model_version: p.model_version,
-    scope: interviewModule ? `模块 ${interviewModule} 的当前陈述、直接链接条目及所附公共文档；未核对其他设定或详情字段。` : "所附可读规格文档；不声称完整 Product Model 或正式独立审计通过。",
+    scope: interviewModule ? `模块 ${interviewModule} 的当前陈述、直接链接条目及所附公共文档；未核对其他设定或详情字段。` : "所附可读规格文档及同版项目顶层系统架构设计全文；核对需求、职责、接口、数据、状态与异常路径的一致性，不声称正式独立审计通过。",
     documents, delivery_mode: p.delivery_policy?.effective_mode ?? null,
     scoped_dispositions: (p.delivery_policy?.risk_overrides ?? []).filter(r => r.status === "CONFIRMED")
       .map(({id, scope_ids, minimum_mode, resolution, rationale}) => ({id, scope_ids, minimum_mode, resolution, rationale}))};

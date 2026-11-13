@@ -1,10 +1,10 @@
 import type {Item, Project} from "../shared-types/domain.ts";
-import { explicitlyExcludesScope, withoutExplicitScopeExclusions } from "./scope-exclusions.ts";
+import {explicitlyExcludesScope, withoutExplicitScopeExclusions} from "./scope-exclusions.ts";
 
 const active = (item: Item) => item.status !== "REJECTED" && item.status !== "SUPERSEDED";
 const paymentWords = /\b(?:payments?|checkout|charges?|refunds?|stripe|subscriptions?)\b|支付|付款|扣款|退款|收款|充值|内购|付费抽卡|收取(?:服务费|月费|年费)|(?:收取|执行|自动|启用|实现|开始|支持|进行|发起|本期|首期|平台|立即)(?:实际|真实)?收费/i;
 const legacyWords = /payment|billing|subscription|charge|refund|支付|账单|订阅|扣款|付款|收款|退款|充值/i;
-const failureWords = /payment fail|card declined|billing fail|charge fail|支付失败|扣款失败|付款失败/i;
+const failureWords = /payment fail|card declined|billing fail|charge fail|支付失败|扣款失败|付款失败|充值失败/i;
 
 function withoutInactivePayments(sentence: string, wholeOnly = false): string {
   if (/[?？]|是否|待定/u.test(sentence)) return sentence;
@@ -24,9 +24,9 @@ function withoutInactivePayments(sentence: string, wholeOnly = false): string {
 // Only an explicit whole real-payment exclusion authorizes the narrower check.
 // A refund-only or failure-only deferral cannot switch off checkout requirements.
 function paymentExclusion(item: Item): boolean {
-  if (explicitlyExcludesScope(item, "payment")) return !paymentWords.test(currentPaymentText(item));
-  if (item.type !== "exclusion" || item.status !== "CONFIRMED" || /[?？]|是否|待定/i.test(item.statement)) return false;
-  const disabled = /^(?:本期|首期|当前)?\s*真实支付(?:及其配套扣款、退款与失败处理流程)?(?:功能|能力|流程)?(?:均|保持)?(?:后置|延期|关闭|禁用|排除)[。\s]*$/u.test(item.statement) ||
+  const explicit = explicitlyExcludesScope(item, "payment");
+  if ((!explicit && item.type !== "exclusion") || item.status !== "CONFIRMED" || /[?？]|是否|待定/i.test(item.statement)) return false;
+  const disabled = explicit || /^(?:本期|首期|当前)?\s*真实支付(?:及其配套扣款、退款与失败处理流程)?(?:功能|能力|流程)?(?:均|保持)?(?:后置|延期|关闭|禁用|排除)[。\s]*$/u.test(item.statement) ||
     /^(?:all )?(?:real|live) payments?(?: and (?:their )?(?:charges?, refunds? and failure handling))? (?:are |is )?(?:deferred|excluded|disabled)[.\s]*$/i.test(item.statement) ||
     withoutInactivePayments(item.statement, true) !== item.statement;
   return disabled && !paymentWords.test(currentPaymentText(item));
@@ -70,7 +70,7 @@ function currentPaymentText(item: Item): string {
       .replace(/(?:以后|未来|后续)(?:启用|开放)(?:(?!但是|但|同时|并且)[^。；;，,\n]){0,80}?(?:须|需)(?:要)?另行(?:审核|批准|确认)/gu, " ");
   }).join("");
   return statement.split(/[。；;，,\n]|但是|但|同时|并且|\b(?:but|while)\b/iu).map(clause => clause
-    .replace(/payment fail(?:ure)?|card declined|billing fail(?:ure)?|charge fail(?:ure)?|支付失败|扣款失败|付款失败/gi, " ")
+    .replace(/payment fail(?:ure)?|card declined|billing fail(?:ure)?|charge fail(?:ure)?|支付失败|扣款失败|付款失败|充值失败/gi, " ")
     .replace(/(?:真实)?支付(?:V0|本期|首期|当前|保持|仍|功能|能力|\s|\/正式报价)*(?:关闭|禁用|后置|延期)/giu, " ")
     .replace(/(?:首期)?不(?:生成正式报价或执行)?扣款/gu, " ")
     .replace(/不能因影子修订产生实际扣款/gu, " ")
@@ -85,7 +85,7 @@ export function paymentScope(project: Project, wholeFinancialScopeDeferred: bool
   const exclusions = items.filter(paymentExclusion);
   const failure = items.filter(item => item.status === "CONFIRMED" &&
     ["functional_requirement", "acceptance_criterion", "decision"].includes(item.type) &&
-    failureWords.test(item.statement) && !/[?？]|是否|待定|后置|延期|排除|禁用|\b(?:defer|exclude|disable)|不(?:处理|支持|实现)(?:支付|扣款|付款)失败|(?:无需|不需要).{0,12}(?:支付|扣款|付款)失败|(?:payment|billing|charge) failure.{0,20}(?:not required|not handled)/i.test(item.statement));
+    failureWords.test(item.statement) && !/[?？]|是否|待定|后置|延期|排除|禁用|\b(?:defer|exclude|disable)|不(?:处理|支持|实现)(?:支付|扣款|付款|充值)失败|(?:无需|不需要).{0,12}(?:支付|扣款|付款|充值)失败|(?:payment|billing|charge) failure.{0,20}(?:not required|not handled)/i.test(item.statement));
   const current = wholeFinancialScopeDeferred ? [] : items.filter(item => !exclusions.includes(item) &&
     (paymentWords.test(currentPaymentText(item)) || !exclusions.length && legacyWords.test(currentPaymentText(item))));
   return {not_applicable: wholeFinancialScopeDeferred || exclusions.length > 0 && current.length === 0,

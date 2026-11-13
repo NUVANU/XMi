@@ -12,6 +12,7 @@ import {projectPath} from "../storage/project-files.ts";
 import {documentDelivery, documentDeliveryMarkdown} from "./document-delivery.ts";
 import type {DeliveryWorkflow, DocumentReviewSummary} from "./document-delivery.ts";
 import {ProjectService, replay} from "./project-service.ts";
+import {systemArchitecture, systemArchitectureSummary, ARCHITECTURE_PACKAGE_FILE, ARCHITECTURE_LEGACY_MARKER} from "./system-architecture.ts";
 
 export const HANDOFF_CONTRACT_VERSION = "XDEV-DELIVERY-HANDOFF/1";
 const HANDOFF_VERSION_VALUE = "1";
@@ -483,6 +484,11 @@ function buildArtifact(project: Project, evidence: M8ReadinessEvidence, delivery
   for (const [path, content] of Object.entries(markdownFiles(xspec)) as Array<[Exclude<XSpecPackagePath, "manifest.json" | "xspec.json">, string]>) {
     files.set(path, content.endsWith("\n") ? content : content + "\n");
   }
+  // Preserve the sixteen-file carrier. The new complete architecture is the
+  // technical document's main body; the original projection remains an appendix.
+  const architecture = systemArchitecture(project);
+  files.set(ARCHITECTURE_PACKAGE_FILE, architecture.content + ARCHITECTURE_LEGACY_MARKER +
+    "## 附录：已确认技术方案的原投影\n\n" + files.get(ARCHITECTURE_PACKAGE_FILE)!);
   if (delivery) {
     requireCondition(delivery.document_review.project_id === project.project_id &&
       delivery.document_review.current_model_version === project.model_version, "DOCUMENT_REVIEW_VERSION_MISMATCH");
@@ -797,7 +803,7 @@ export class XSpecService {
       xdev_compatible: first.consumers.xdev.accepted, owner_confirmed_export: true, immutable_export_exists: true,
       audit: evidence.audit ?? {audit_run_id: null, audit_status: "UNAVAILABLE", isolation_status: "UNAVAILABLE",
         assurance_level: null, blocking_finding_count: 0}};
-    const delivery = review ? documentDelivery(review, first.package_valid, first.readiness_evaluation) : undefined;
+    const delivery = review ? documentDelivery(review, first.package_valid, first.readiness_evaluation, systemArchitectureSummary(project)) : undefined;
     const artifact = this.compile(project, finalEvidence, delivery);
     const validation = this.validate(project, artifact, finalEvidence);
     requireCondition(validation.package_valid, "XSPEC_PACKAGE_INVALID");

@@ -212,6 +212,8 @@ export const commandSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("ITEM_REJECTED"), item_id: z.string().min(3),
     fingerprint: z.string().regex(/^[a-f0-9]{64}$/), owner_action: ownerConfirmation.extend({intent: z.literal("REJECT")}),
     reason: z.string().min(1).max(2000).optional() }),
+  z.strictObject({kind:z.literal("ITEM_TEXT_REVISED"),item_id:z.string().min(3),fingerprint:z.string().regex(/^[a-f0-9]{64}$/),
+    statement:z.string().trim().min(1).max(8000),owner_action:ownerAction("REVISE_TEXT")}),
   z.strictObject({ kind: z.literal("DECISION_APPROVED"), item_id: z.string().min(3),
     fingerprint: z.string().regex(/^[a-f0-9]{64}$/), selected_option_id: z.string().min(1).max(100),
     owner_action: ownerAction("APPROVE_DECISION") }),

@@ -93,7 +93,7 @@ test("hostile product text cannot create architecture chapters or Mermaid nodes"
 });
 
 test("project architecture is a hashed regenerable view and tampering never changes canonical state",t=>{
-  const seed=reviewProjectService(),root=realpathSync(mkdtempSync(join(tmpdir(),"xmi-architecture-context-")));
+  const seed=reviewProjectService(),root=realpathSync.native(mkdtempSync(join(tmpdir(),"xmi-architecture-context-")));
   t.after(()=>{seed.store.close();rmSync(root,{recursive:true,force:true});});mkdirSync(join(root,".xmi"));
   const events=seed.service.history(seed.project.project_id),before=fingerprint(seed.service.get(seed.project.project_id));
   writeProjectContext(root,seed.project,events);
@@ -104,7 +104,7 @@ test("project architecture is a hashed regenerable view and tampering never chan
 });
 
 async function nativeFixture(t:TestContext){
-  const root=realpathSync(mkdtempSync(join(tmpdir(),"xmi-architecture-native-"))),projectRoot=join(root,"project"),native=join(root,"native"),sessions=join(root,"sessions");
+  const root=realpathSync.native(mkdtempSync(join(tmpdir(),"xmi-architecture-native-"))),projectRoot=join(root,"project"),native=join(root,"native"),sessions=join(root,"sessions");
   for(const path of [join(projectRoot,".xmi"),native,sessions])mkdirSync(path,{recursive:true});
   const seeded=reviewProjectService(),id=seeded.project.project_id,db=join(projectRoot,".xmi/xmi-state.sqlite");
   const store=new SqliteProjectStore(db,projectRoot),service=new ProjectService(store),events=seeded.service.history(id);

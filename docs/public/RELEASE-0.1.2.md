@@ -20,7 +20,7 @@ Clean-machine installation, other hosts/operating systems, formal product assura
 
 The accepted local source ZIP has SHA-256 `1dfb0ee4e610f6b0b7983b621d4de898d0bbe0bd00afaff3d5ba52e387342ca2`. All 280 payload files were checked against its embedded SHA-256 manifest and the accepted source directory before synchronization.
 
-The GitHub synchronization retains those runtime sources and tests, updates the bilingual README/platform/install descriptions, and adds this release note and the scoped acceptance summary. These documentation changes mean a GitHub source ZIP is a different archive; the hash above identifies the original accepted local artifact. The local source/lite ZIPs are not uploaded as release assets by this synchronization.
+The GitHub synchronization retains the runtime sources, updates the bilingual README/platform/install descriptions, and adds this release note and the scoped acceptance summary. Initial Windows CI exposed two architecture-test fixtures using `realpathSync` while the product guard uses `realpathSync.native`; the synchronization aligns those two fixture roots with the product path normalization. Test assertions and runtime guards are unchanged. These documentation changes mean a GitHub source ZIP is a different archive; the hash above identifies the original accepted local artifact. The local source/lite ZIPs are not uploaded as release assets by this synchronization.
 
 ## 中文说明
 
@@ -28,4 +28,4 @@ V0.1.2 保留已确认内容，按本次变化进行增量确认，默认回复�
 
 本地验收记录为测试源码和实际安装发行树各 483 项通过、0 失败，并完成现有 Windows Codex 桌面上的单项修改、十项未变化条目保留、同版架构与一次真实独立 Agent 评审。三个建议性问题及夹具 NOT_READY_M8 状态继续保留，不构成正式产品保证。新电脑安装、跨平台、实际 XUi/XDev 下游验收须单独验证。
 
-公开源码保留验收包的运行源码与测试，并补充双语 README、平台/安装说明和验收摘要。上面的哈希仅标识原本地验收 ZIP，不是修改文档后的 GitHub 下载包哈希。本次同步不上传该本地源码/轻量 ZIP 作为 Release 附件。
+公开源码保留验收包的运行源码，并补充双语 README、平台/安装说明和验收摘要。首次 Windows CI 发现架构测试的两处夹具使用 realpathSync，而产品守卫使用 realpathSync.native；同步时仅对齐这两处夹具根路径，原断言与产品守卫保持不变。上面的哈希仅标识原本地验收 ZIP，不是修改文档后的 GitHub 下载包哈希。本次同步不上传该本地源码/轻量 ZIP 作为 Release 附件。

@@ -12,6 +12,9 @@ import type { ProjectStore, StoreTransaction } from "../packages/storage/store.t
 import { ProjectService, replay } from "../packages/core/project-service.ts";
 import { fingerprint, itemFingerprint, modeFingerprint, schemaValidators, validateProject } from "../packages/core/validation.ts";
 import type { Actor, Command, Project, DeliveryMode } from "../packages/shared-types/domain.ts";
+import {commandSchema} from "../packages/shared-types/domain.ts";
+import {outputs} from "../apps/mcp-server/contracts.ts";
+import {systemArchitectureSummarySchema} from "../packages/core/system-architecture.ts";
 
 const at = "2026-09-15T08:00:00.000Z";
 const source = { type: "conversation_turn", ref: "fixture:idea" } as const;
@@ -266,10 +269,25 @@ test("independent SQLite clients reject stale writes and preserve idempotent rec
   assert.equal(second.history(p.project_id).length, 2);
 });
 
-test("all checked-in JSON samples validate using draft 2020-12 and formats", () => {
+test("all checked-in JSON samples validate against their published or strict runtime schemas", () => {
   for (const name of readdirSync("samples").filter((name) => name.endsWith(".json"))) {
-    const schema = name.includes("xmi-project") ? "xmi-project" : name.includes("xspec") ? "xspec" : "readiness-report";
     const sample = JSON.parse(readFileSync(join("samples", name), "utf8"));
+    if(name==="confirmation-reply.json"){
+      assert.equal(outputs.xmi_item_review_prepare.safeParse(sample).success,true,name);
+      assert.equal(outputs.xmi_item_review_prepare.safeParse({...sample,schema_version:"unsupported"}).success,false,name);
+      continue;
+    }
+    if(name==="issue-handling-event.json"){
+      assert.equal(commandSchema.safeParse(sample).success,true,name);
+      assert.equal(commandSchema.safeParse({...sample,kind:"UNSUPPORTED_EVENT"}).success,false,name);
+      continue;
+    }
+    if(name==="system-architecture-summary.json"){
+      assert.equal(systemArchitectureSummarySchema.safeParse(sample).success,true,name);
+      assert.equal(systemArchitectureSummarySchema.safeParse({...sample,requires_document_confirmation:true}).success,false,name);
+      continue;
+    }
+    const schema = name.includes("xmi-project") ? "xmi-project" : name.includes("xspec") ? "xspec" : "readiness-report";
     assert.equal(schemaValidators[schema]!(sample), true, name + ": " + JSON.stringify(schemaValidators[schema]!.errors));
     assert.equal(schemaValidators[schema]!({...sample, schema_version: "unsupported"}), false, name);
   }

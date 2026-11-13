@@ -49,8 +49,10 @@ export function recommendSolutions(project: Project) {
   const localClauses = deploymentClauses.filter((clause) => localWords.test(clause) && !negatedLocal.test(clause));
   const local = localClauses.length > 0;
   const offlineOnly = localClauses.some((clause) => /local.only|offline.only|仅本地|只在本地|纯离线/i.test(clause));
-  const browserOnly = !game && deploymentClauses.some((clause) =>
-    localBrowserOnly.test(clause) && !negatedLocal.test(clause) && !negatedBrowserOnly.test(clause));
+  const browserOnly = !game && constraints.filter(item => item.type !== "exclusion" &&
+    !/[?？]|是否|待定|待确认|尚未确定|\b(?:undecided|unknown|maybe|perhaps)\b/i.test(item.statement))
+    .some(item => solutionClauses(item.statement).some(clause =>
+      localBrowserOnly.test(clause) && !negatedLocal.test(clause) && !negatedBrowserOnly.test(clause)));
   const browserMemory = browserOnly && deploymentClauses.find((clause) => pageMemory.test(clause) && !negatedPageMemory.test(clause));
   const unresolved = [...solutionBlockingInputs(project), recheck];
   let options: SolutionOption[];

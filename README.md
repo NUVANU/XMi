@@ -12,6 +12,15 @@ You should not have to know the code before you can explain the product you want
 
 **XMi helps you make those decisions before they become code.** Discuss your idea module by module, see what is confirmed and what is still open, and export a versioned specification that another developer or agent can inspect.
 
+## What’s new in V0.1.2
+
+- **Confirm the changes that need a decision.** Reuse unchanged confirmed facts and dispositions. A clear issue-handling reply confirms its chosen actions; reports and review startup do not add another confirmation round.
+- **Generate the architecture alongside the specification.** After solution confirmation, XMi generates the version-bound **24-chapter system architecture** before full independent content review. It is available at `.xmi/context/architecture.md` and in `TECHNICAL-SOLUTION-BLUEPRINT.md` within the existing 16-file XSpec package.
+- **Review requirements and architecture together.** Use the supported host’s existing independent-agent capability for advisory content review. Unchanged readback reuses the current result; an actual product change receives review for the new version.
+- **Retain the original boundaries.** Fixes cover configured `CODEX_HOME` routing, confirmed local-browser/page-memory solutions, and recharge-failure recognition. A generated architecture does not invent approval, and export still needs authorization for the exact package.
+
+See the [V0.1.2 release notes](docs/public/RELEASE-0.1.2.md) and [workflow](docs/public/WORKFLOW.md) for the supported behavior and acceptance scope.
+
 ## What can XMi help you do?
 
 | Start with… | Work toward… |
@@ -49,7 +58,9 @@ Discuss the current rules, related background, open decisions, and alternatives 
 
 ### Keep confirmation meaningful
 
-On the documented Codex path, the full checklist is shown in chat. A real user reply is checked by the native confirmation hook; the tool then commits the corresponding change and reads the stored state back. Preparing a checklist is not the same as confirming it.
+On the documented Codex path, the complete pending checklist is shown in chat. For a single-item change, that list contains the changed item while the other confirmed items are reused. The default whole-list reply is **确认**; legacy replies remain compatible. Conditional, modifying, or incomplete replies do not mean whole-list consent.
+
+A real user reply is checked by the native confirmation hook; the tool commits the corresponding change and reads the stored state back. Preparing a checklist alone does not confirm it. Architecture generation and validation reports do not create extra product-confirmation steps.
 
 ### Continue beyond one conversation
 
@@ -65,7 +76,7 @@ The current XDev handoff contract uses a 16-file package with manifest/content h
 
 ## Quick start
 
-Current public source: **V0.1 community line · package `0.1.1` · Apache-2.0**.
+Current public source: **V0.1.2 · package `0.1.2` · Apache-2.0**.
 
 Use **Node.js 24.20.0** and **npm 11.19.0**. Clone this repository or download its source, then run the following from its root:
 
@@ -115,9 +126,11 @@ XMi works without XMem. Its canonical product model is not delegated to a memory
 
 ## Status, privacy, and limitations
 
-The published platform record includes one genuine Codex 16-item confirmation-and-readback success path, not exhaustive host-level failure/concurrency acceptance. The new public configuration helper still needs clean-host acceptance. Linux/macOS host use and WorkBuddy’s full flow are not established by that result.
+The V0.1.2 local release record reports **483 passing tests, zero failures** in both the tested source and installed release tree, plus a genuine workflow check in the existing Windows Codex desktop installation. That check applied one changed item, preserved ten unchanged confirmed items, generated the same-version 24-chapter architecture, and collected one real independent Agent review. See the [scoped acceptance summary](docs/public/releases/0.1.2/ACCEPTANCE-SUMMARY.json).
 
-Risk matching is deterministic review assistance and may need clarification for ambiguous or mixed-scope text. Independent content review and actual XDev/XUi consumer acceptance remain separate from local schema/contract checks. See [known issues](docs/public/KNOWN-ISSUES.md) and [platform evidence](docs/public/PLATFORMS.md).
+This establishes that bounded existing-machine workflow. Clean-machine installation, exhaustive host-level failure/concurrency acceptance, Linux/macOS host use, and WorkBuddy’s full flow remain separate checks.
+
+Risk matching is deterministic review assistance and may need clarification for ambiguous or mixed-scope text. The independent content review is advisory; it does not establish formal product assurance or actual XDev/XUi downstream acceptance. The acceptance fixture retained its unresolved findings and `NOT_READY_M8` status. See [known issues](docs/public/KNOWN-ISSUES.md) and [platform evidence](docs/public/PLATFORMS.md).
 
 Product data is stored locally on the documented path. Your host/model may still transmit conversation or tool context to its provider. Import only material you are authorized to use; keep secrets and private project data out of public issues. See [security policy](SECURITY.md).
 

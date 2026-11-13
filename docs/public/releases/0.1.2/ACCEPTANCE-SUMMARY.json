@@ -1,0 +1,52 @@
+{
+  "version": "0.1.2",
+  "status": "LOCAL_STABLE_RELEASE_ACCEPTED",
+  "release_date": "2026-11-13",
+  "release_scope": "Windows Codex desktop local XMi workflow; existing machine installation",
+  "tests": {
+    "source": {
+      "passed": 483,
+      "failed": 0
+    },
+    "release_tree": {
+      "passed": 483,
+      "failed": 0
+    },
+    "lint": "PASS",
+    "typecheck_and_build": "PASS",
+    "synthetic_package_selfcheck": "PASS"
+  },
+  "desktop": {
+    "status": "PASS",
+    "new_runtime_loaded": true,
+    "actual_native_confirmation": true,
+    "checklist_items": 1,
+    "changed_items": 1,
+    "unchanged_confirmed_items": 10,
+    "additional_confirmation_requests": 0,
+    "same_call_validation": "PASS",
+    "architecture_chapters": 24,
+    "architecture_same_version": true,
+    "architecture_confirmation_required": false,
+    "independent_content_review": "COMPLETED",
+    "actual_review_agents": 1,
+    "unchanged_readback_reuses_review": true
+  },
+  "fixture_limitations": {
+    "advisory_findings_retained": 3,
+    "product_readiness": "NOT_READY_M8",
+    "formal_product_acceptance": false
+  },
+  "distribution": {
+    "source_and_lite_archives_verified": true,
+    "installed_source_matches_archive": true,
+    "remote_published": false,
+    "node_modules_in_archives": false
+  },
+  "not_established": [
+    "clean-machine installation",
+    "macOS/Linux or other desktop host acceptance",
+    "formal product assurance",
+    "real XUi/XDev downstream acceptance"
+  ]
+}

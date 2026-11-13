@@ -4,6 +4,7 @@ import {CompletenessService, evaluateRisk, riskResolutionRevision} from "../pack
 import {AuditService} from "../packages/core/audit-service.ts";
 import {ProjectService} from "../packages/core/project-service.ts";
 import {MemoryProjectStore} from "../packages/storage/memory.ts";
+import {paymentScope} from "../packages/core/payment-scope.ts";
 import type {Item, Project} from "../packages/shared-types/domain.ts";
 
 const source = {type: "owner_action" as const, ref: "fixture:payment-profile"};
@@ -23,6 +24,41 @@ const completeness = new CompletenessService(), audit = new AuditService();
 const row = (p: Project, key = "commercial.payment-failure") => completeness.evaluate(p).profile_results.find(r => r.rule_id === key)!;
 const paymentFindings = (p: Project) => audit.run(p).findings.filter(f => f.category.startsWith("PAYMENT_"));
 const exclusion = () => item("EXCL-PAY", "exclusion", "真实支付及其配套扣款、退款与失败处理流程均后置。");
+
+test("confirmed recharge failure behavior is recognized without rewriting the Owner's existing wording", () => {
+  const statement="充值失败不增加HP；玩家取消、支付拒绝或明确失败时说明原因并保留原余额。订单超时或状态不明显示处理中，不能直接当成成功或失败；重新连接后查询原订单，重复回调不能重复到账。";
+  for(const type of ["functional_requirement","acceptance_criterion","decision"] as const){
+    const p=project([item("TOPUP","functional_requirement","玩家可充值HP。"),item("FAIL",type,statement)]),before=structuredClone(p);
+    const risk=evaluateRisk(p);
+    assert.deepEqual(paymentScope(p,false).failure_ids,["FAIL"]);
+    assert.equal(paymentFindings(p).some(f=>f.category==="PAYMENT_FAILURE"),false);
+    assert.equal(row(p).confirmed,true);assert.deepEqual(row(p).evidence_ids,["FAIL"]);
+    assert.deepEqual(p,before);assert.deepEqual(evaluateRisk(p),risk);
+  }
+});
+
+test("recharge failure wording never adopts drafts, wrong item types or a declined/deferred failure handler", () => {
+  const failure=item("FAIL","functional_requirement","充值失败保留余额并显示原因。"),p=project([item("LIVE","functional_requirement","玩家可充值HP。"),failure]);
+  for(const status of ["PROPOSED","ASSUMED","INFERRED","OPEN","BLOCKING","REJECTED","SUPERSEDED"] as const){
+    failure.status=status;assert.equal(row(p).confirmed,false,status);
+    assert.ok(paymentFindings(p).some(f=>f.category==="PAYMENT_FAILURE"),status);
+  }
+  failure.status="CONFIRMED";
+  for(const statement of ["不处理充值失败。","不支持充值失败。","不实现充值失败处理。","无需处理充值失败。","不需要实现充值失败处理。","充值失败处理后置。","充值失败处理待定。","是否处理充值失败？"]){
+    failure.statement=statement;assert.equal(row(p).confirmed,false,statement);
+    assert.ok(paymentFindings(p).some(f=>f.category==="PAYMENT_FAILURE"),statement);
+  }
+  failure.statement="充值失败保留余额并显示原因。";
+  for(const type of ["vision","constraint","exclusion"] as const){failure.type=type;assert.equal(row(p).confirmed,false,type);}
+});
+
+test("recharge failure evidence alone does not create live checkout scope or hide a separate live clause", () => {
+  const p=project([exclusion(),item("FAIL","functional_requirement","充值失败保留原余额并说明原因。")]);
+  assert.equal(paymentScope(p,false).conflict,false);assert.deepEqual(paymentFindings(p),[]);
+  p.items[1]!.statement+="平台仍正常收款。";
+  assert.equal(paymentScope(p,false).conflict,true);
+  assert.ok(paymentFindings(p).some(f=>f.category==="PAYMENT_SCOPE_CONFLICT"));
+});
 
 test("profile recognizes confirmed explicit synthetic scope, not vague, questioned, negated or unconfirmed scope", () => {
   for (const statement of ["首期评测资料仅使用公开合成案例。", "数据范围：仅采用公开的合成数据。", "本期案例全部为公开合成案例。"])

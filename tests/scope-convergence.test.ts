@@ -33,7 +33,10 @@ for (const approve of [false, true]) test(`default XSpec delivery needs only exa
   assert.equal(tools.length, 26);
   assert.equal(tools.some(tool => tool.name.startsWith("xmi_spec_review_")), false);
   const instructions = client.getInstructions()!;
-  assert.match(instructions, /Independent document rereview is optional and deferred/);
+  assert.match(instructions, /Independent document rereview runs automatically after local audit passes/);
+  assert.match(instructions, /A genuine numbered handling reply itself confirms/);
+  assert.match(instructions, /Reuse unchanged confirmed decisions as context, and batch only pending actions and substantive changes/);
+  assert.match(instructions, /If no actions remain, proceed directly to validation/);
   assert.match(instructions, /do not start product coding, playable prototype development or art asset generation/);
   assert.match(instructions, /FAST_VALIDATION\/PROTOTYPE_READY are specification readiness targets/);
   assert.match(instructions, /do not create\/message it without explicit authorization/);
@@ -49,11 +52,10 @@ for (const approve of [false, true]) test(`default XSpec delivery needs only exa
     const parsed = outputs[name].parse(result.structuredContent);
     return JSON.parse(JSON.stringify(parsed));
   };
-  const compiled = await call("xmi_xspec_compile"); assert.equal(compiled.ok, true);
-  assert.equal(compiled.data.artifact.files.length, 16);
   const checked = await call("xmi_xspec_validate"); assert.equal(checked.ok, true);
   assert.equal(checked.data.validation.package_valid, true);
   assert.equal(checked.data.validation.readiness_evaluation.hard_gate_ready, false);
+  assert.match(checked.data.delivery_workflow.next_action, /可请求精确导出授权/);
   assert.equal(approvals, 0);
   const exported = await call("xmi_export_package", {package_name: packageName, idempotency_key: packageName});
   assert.equal(approvals, 1, JSON.stringify(exported));

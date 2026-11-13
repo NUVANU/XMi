@@ -5,6 +5,7 @@ import { SqliteProjectStore } from "../../packages/storage/sqlite.ts";
 import { ProjectService } from "../../packages/core/project-service.ts";
 import { createXmiServer } from "./server.ts";
 import { createModuleReviewRouter } from "../local-module-review/adapter.ts";
+import { moduleReviewDirectory } from "../local-module-review/hook.ts";
 import {codexReviewPaths} from "../local-module-review/host-paths.ts";
 import { createSingleReviewRouter } from "../local-module-review/single.ts";
 import {DocumentReviewRunner} from "./document-review.ts";
@@ -19,23 +20,22 @@ async function main(nativeReview: boolean, hybrid?: HybridConnector) {
     process.exitCode = 1;
     return;
   }
-  const reviewPaths = nativeReview ? codexReviewPaths() : undefined;
   const store = new SqliteProjectStore(path);
   const service = new ProjectService(store);
-  const moduleReview = reviewPaths ? createModuleReviewRouter(reviewPaths.reviews, path, process.env.CODEX_THREAD_ID, service) : undefined;
-  const singleReview = reviewPaths ? createSingleReviewRouter(reviewPaths.reviews, path, process.env.CODEX_THREAD_ID, service) : undefined;
+  const moduleReview = nativeReview ? createModuleReviewRouter(moduleReviewDirectory(), path, process.env.CODEX_THREAD_ID, service) : undefined;
+  const singleReview = nativeReview ? createSingleReviewRouter(moduleReviewDirectory(), path, process.env.CODEX_THREAD_ID, service) : undefined;
   // Local Codex delegates execution to its own fresh-context Agent. Generic hosts
   // retain the core 26-tool workflow; no external provider or CLI is launched here.
-  const hostSpecReview = reviewPaths ? new DocumentReviewRunner({directory: join(dirname(path), "xmi-spec-reviews"),
-    sessions: reviewPaths.sessions, native: reviewPaths.reviews}) : undefined;
+  const hostSpecReview = nativeReview ? new DocumentReviewRunner({directory: join(dirname(path), "xmi-spec-reviews"),
+    sessions: codexReviewPaths().sessions, native: moduleReviewDirectory()}) : undefined;
   const workspaces = new ProjectWorkspaces(join(dirname(path), "xmi-project-locations.sqlite"));
   const server = createXmiServer(service, {storagePath: path, moduleReview, singleReview, hostSpecReview, workspaces, hybrid,
     workspaceOptions: binding => {
-      const reviewer = reviewPaths ? new DocumentReviewRunner({directory: projectPath(binding.root, ".xmi", "reviews"),
-        sessions: reviewPaths.sessions, native: reviewPaths.reviews}) : undefined;
+      const reviewer = nativeReview ? new DocumentReviewRunner({directory: projectPath(binding.root, ".xmi", "reviews"),
+        sessions: codexReviewPaths().sessions, native: moduleReviewDirectory()}) : undefined;
       return {options: {storagePath: binding.database, projectDirectory: binding.root, hostSpecReview: reviewer,
-        moduleReview: reviewPaths ? createModuleReviewRouter(reviewPaths.reviews, binding.database, process.env.CODEX_THREAD_ID, binding.service) : undefined,
-        singleReview: reviewPaths ? createSingleReviewRouter(reviewPaths.reviews, binding.database, process.env.CODEX_THREAD_ID, binding.service) : undefined},
+        moduleReview: nativeReview ? createModuleReviewRouter(moduleReviewDirectory(), binding.database, process.env.CODEX_THREAD_ID, binding.service) : undefined,
+        singleReview: nativeReview ? createSingleReviewRouter(moduleReviewDirectory(), binding.database, process.env.CODEX_THREAD_ID, binding.service) : undefined},
         close: () => reviewer?.close()};
     }});
   let closed = false;

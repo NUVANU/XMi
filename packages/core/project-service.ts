@@ -84,6 +84,14 @@ function transition(previous: Project | undefined, event: Omit<DomainEvent, "has
           item.blueprint_detail.delegation = null;
         }
       }
+    } else if (command.kind === "ITEM_TEXT_REVISED") {
+      requireCondition(actor === "owner", "OWNER_ACTION_REQUIRED");
+      const item=project.items.find(i=>i.id===command.item_id);
+      requireCondition(item && !["REJECTED","SUPERSEDED"].includes(item.status),"ITEM_NOT_REVISABLE");
+      requireCondition(!item.decision_detail && !item.blueprint_detail && !["decision","solution_blueprint"].includes(item.type),"STRUCTURED_ITEM_REQUIRES_DECISION");
+      requireCondition(itemFingerprint(item)===command.fingerprint,"FINGERPRINT_MISMATCH");
+      item.statement=command.statement;item.status="CONFIRMED";item.version++;
+      item.updated_at=at;item.confirmed_at=at;item.confirmed_by="owner";item.source_refs.push(command.owner_action.source_ref);
     } else if (command.kind === "DECISION_APPROVED") {
       requireCondition(actor === "owner", "OWNER_ACTION_REQUIRED");
       const item = project.items.find((i) => i.id === command.item_id);

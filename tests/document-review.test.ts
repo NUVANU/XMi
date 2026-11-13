@@ -19,6 +19,8 @@ import {SqliteSpecReviewStore} from "../packages/storage/spec-review-store.ts";
 import {reviewProject, reviewProjectService} from "./fixtures/spec-review-project.ts";
 import {documentDelivery, documentReviewSummarySchema, unavailableDocumentReview} from "../packages/core/document-delivery.ts";
 import {XSpecService} from "../packages/core/xspec-service.ts";
+import {saveIssueDispositions} from "../apps/local-module-review/issue-dispositions.ts";
+import {randomUUID} from "node:crypto";
 
 const session = "00000000-0000-4000-8000-000000000001", child = "00000000-0000-4000-8000-000000000002";
 const line = (v: unknown) => JSON.stringify(v) + "\n";
@@ -100,7 +102,7 @@ function fixture(t: TestContext) {
     ].map(line).join(""));
     return {prepared, host, packet};
   }
-  return {...data, runner, directory, start, deliver};
+  return {...data, runner, directory, native, start, deliver};
 }
 
 test("default document runner collects actual-source fixtures once, preserves advisory priority and canonical state", t => {
@@ -164,7 +166,14 @@ test("delivery lookup survives runner restart, checks native source and version,
   assert.equal(f.runner.summary(f.project).run_id, prepared.run_id, "module review cannot replace the full review");
   const stale = f.runner.summary({...f.project, model_version: f.project.model_version + 1});
   assert.equal(stale.state, "STALE"); assert.equal(stale.reviewed_model_version, f.project.model_version);
-  assert.equal(documentDelivery(stale, true).stage, "REFRESH_REVIEW");
+  const staleDelivery = documentDelivery(stale, true);
+  assert.equal(staleDelivery.stage, "REFRESH_REVIEW", "published stage still records stale review");
+  assert.deepEqual(staleDelivery.document_review, stale);
+  assert.match(staleDelivery.next_action, /自动继续一次当前版本的轻量独立复审/);
+  assert.match(staleDelivery.next_action, /不再要求确认旧清单/);
+  assert.match(documentDelivery(stale).next_action, /审核当前版本/);
+  assert.match(documentDelivery(stale).next_action, /自动重建同版顶层系统架构文档/);
+  assert.equal(documentDelivery(stale, false).stage, "CHECK_SPEC");
   const root = join(f.directory, "..");
   const restarted = new DocumentReviewRunner({directory: f.directory, sessions: join(root, "sessions"), native: join(root, "native")});
   try {
@@ -191,11 +200,31 @@ test("clean review enables the light delivery step, not formal readiness or prod
   assert.equal(document.readiness.hard_gates.find((g: {id: string}) => g.id === "RG-SPEC-REVIEW").passed, false);
   assert.equal(canonical(f.service.get(f.project.project_id)), before);
   assert.equal(documentDelivery(unavailableDocumentReview(f.project), true).stage, "REVIEW_UNAVAILABLE");
-  assert.equal(documentDelivery({...summary, note_count: 1}, true).stage, "REVIEW_FINDINGS");
+  assert.equal(documentDelivery({...summary, note_count: 1}, true).stage, "READY_TO_EXPORT");
   assert.equal(documentDelivery(summary, false).stage, "CHECK_SPEC");
   for (const changed of [{source_verified: false}, {run_id: null}, {current_model_version: summary.current_model_version + 1}, {formal_isolation_verified: true}]) {
     assert.equal(documentReviewSummarySchema.safeParse({...summary, ...changed}).success, false);
   }
+});
+
+test("handled independent findings and questions retain dispositions without changing the original review or product",t=>{
+  const f=fixture(t),before=canonical(f.project);f.deliver();const status=f.start();
+  assert.equal(status.findings.length,2);assert.equal(status.questions.length,1);
+  const store=new SqliteSpecReviewStore(join(f.directory,"reviews.sqlite"));
+  const original=canonical(store.get(f.project.project_id,status.run_id!)!.run.response);
+  const reviewId=randomUUID();
+  saveIssueDispositions(f.native,f.project.project_id,[...status.findings.map((finding,index)=>({review_id:reviewId,project_id:f.project.project_id,
+    source_run_id:status.run_id!,issue_id:finding.id,problem:finding.statement,action:index===0?"IGNORE" as const:"DEFER" as const,subject:[],
+    source_ref:"fixture:TEST_ONLY-handling",handled_at_version:f.project.model_version})),
+    {review_id:reviewId,project_id:f.project.project_id,source_run_id:status.run_id!,issue_id:"QUESTION-1",problem:status.questions[0]!,action:"DEFER",subject:[],
+      source_ref:"fixture:TEST_ONLY-handling",handled_at_version:f.project.model_version}]);
+  const after=f.runner.status(f.project,status.run_id!,session);
+  assert.ok(after.schema_version==="XMI-DOCUMENT-REVIEW/1");
+  assert.equal(after.findings.length,0);assert.equal(after.total_reported_findings,2);assert.equal(after.handled_findings?.length,2);
+  assert.equal(after.questions.length,0);assert.equal(after.handled_question_count,1);
+  assert.equal(documentDelivery(f.runner.summary(f.project),true).stage,"READY_TO_EXPORT");
+  assert.equal(canonical(store.get(f.project.project_id,status.run_id!)!.run.response),original);store.close();
+  assert.equal(canonical(f.service.get(f.project.project_id)),before);
 });
 
 test("MCP audit, readiness, compilation and validation report the collected review rather than unavailable advice", async t => {

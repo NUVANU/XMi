@@ -1,0 +1,13 @@
+{
+  "schema_version": "0.1.0",
+  "ok": true,
+  "data": {
+    "project_id": "XMI-SYNTHETIC-REPLY",
+    "model_version": 1,
+    "review_id": "00000000-0000-4000-8000-000000000001",
+    "review_text": "Synthetic fixture only. 全部同意请回复“确认”。",
+    "reply": "确认",
+    "host_ready": true,
+    "action": "BATCH"
+  }
+}

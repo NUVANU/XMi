@@ -65,7 +65,8 @@ export class ProjectWorkspaces {
     const manifestPath = projectPath(root, ".xmi", "project.json"), manifest = manifestSchema.parse(boundedProjectJson(manifestPath));
     requireCondition(manifest.create_hash === hash, "PROJECT_DIRECTORY_OCCUPIED");
     const guide = projectPath(root, "XMI-START-HERE.md");
-    requireCondition(!existsSync(guide) || manifest.project_id !== null && readFileSync(guide, "utf8") === projectGuide(manifest.project_id), "PROJECT_FILE_CONFLICT");
+    requireCondition(!existsSync(guide) || manifest.project_id !== null &&
+      [projectGuide(manifest.project_id),projectGuide(manifest.project_id,false)].includes(readFileSync(guide,"utf8")), "PROJECT_FILE_CONFLICT");
     const dbPath = projectPath(root, ".xmi", manifest.database), store = new SqliteProjectStore(dbPath, root), service = new ProjectService(store);
     try {
       requireCondition(store.projectIds().length <= 1 && (!manifest.project_id || store.projectIds()[0] === manifest.project_id), "PROJECT_IDENTITY_MISMATCH");

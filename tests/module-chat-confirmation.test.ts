@@ -85,6 +85,14 @@ test("module list includes full ordinary statements from one module and creates 
   assert.equal(f.service.get(f.project.project_id).model_version, f.project.model_version);
 });
 
+test("module lists suggest the unified confirmation reply and accept it without changing legacy consent", t => {
+  for(const reply of ["确认","确认。","确认好了"]){const f=fixture(t);f.grantPrompt("继续");const prepared=f.host.prepare(f.project,"技能");
+    assert.match(prepared.review_text,/请回复「确认」/);assert.doesNotMatch(prepared.review_text,/确认好了/);
+    assert.match(f.prompt(reply),/确认成功/);assert.equal(f.service.get(f.project.project_id).model_version,f.project.model_version+2);}
+  const f=fixture(t);f.grantPrompt("继续");f.host.prepare(f.project,"技能");f.grantPrompt("确认，但第2项需要改");
+  assert.notEqual(readPending(f.directory,session)?.status,"GRANTED");
+});
+
 test("genuine adapter prompt fixture confirms a module atomically with source event, retry is harmless", t => {
   const f = fixture(t);
   f.prompt("继续");

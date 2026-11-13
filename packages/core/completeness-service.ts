@@ -6,7 +6,7 @@ import { riskContext, unsafeExclusionItems } from "./risk-context.ts";
 import { assessFeasibility } from "./solution-feasibility.ts";
 import { solutionBlockingInputs } from "./solution-options.ts";
 import { paymentScope } from "./payment-scope.ts";
-import { explicitlyExcludesScope, hasAccountOrPrivateScope, hasExternalIntegrationScope } from "./scope-exclusions.ts";
+import {explicitlyExcludesScope, hasAccountOrPrivateScope, hasExternalIntegrationScope} from "./scope-exclusions.ts";
 
 const ranks: Record<DeliveryMode, number> = {FAST_VALIDATION: 0, FAST_DEVELOPMENT: 1, PRODUCT_GRADE: 2};
 const targets: Record<DeliveryMode, "PROTOTYPE_READY" | "BUILD_READY" | "PRODUCT_SPEC_READY"> = {
@@ -105,10 +105,10 @@ const riskRules: readonly RiskRule[] = [
     pattern: /regulated|compliance|\blegal\b|safety.?critical|high consequence|监管|合规|法律|安全关键|高后果/i},
 ];
 
-function explicitNotApplicable(project: Project, key: ApplicabilityKey): boolean {
-  if (key === "ALWAYS") return false;
+function notApplicableEvidence(project: Project, key: ApplicabilityKey): Item[] {
+  if (key === "ALWAYS") return [];
   const tag = `profile-applicability:${key.toLowerCase()}:not-applicable`;
-  return project.items.some((item) => item.status === "CONFIRMED" && (item.tags?.includes(tag) ||
+  return project.items.filter((item) => item.status === "CONFIRMED" && (item.tags?.includes(tag) ||
     key === "ACCOUNT_OR_PRIVATE" && explicitlyExcludesScope(item, "account") ||
     key === "INTEGRATION" && explicitlyExcludesScope(item, "integration")));
 }
@@ -124,7 +124,7 @@ function applicabilitySignal(project: Project, key: ApplicabilityKey): boolean {
 }
 function applicability(project: Project, key: ApplicabilityKey): {value: Applicability; conflict: boolean} {
   if (key === "ALWAYS") return {value: "APPLICABLE", conflict: false};
-  const excluded = explicitNotApplicable(project, key);
+  const excluded = notApplicableEvidence(project, key).length > 0;
   const signaled = applicabilitySignal(project, key);
   if (excluded && signaled) return {value: "UNRESOLVED", conflict: true};
   if (excluded) return {value: "NOT_APPLICABLE", conflict: false};
@@ -133,7 +133,12 @@ function applicability(project: Project, key: ApplicabilityKey): {value: Applica
 }
 function evidence(project: Project, rule: ProfileRule): Item[] {
   const tags = words(rule.evidence_tags); const keywords = words(rule.evidence_keywords);
+  const type = rule.id === "product.primary-user" ? "actor" : rule.id === "product.core-journey" ? "flow" : null;
+  const candidates = type ? project.items.filter(item => active(item) && item.type === type) : [];
+  const sole = candidates.length === 1 && candidates[0]!.status === "CONFIRMED" &&
+    !/[?？]|是否|待定|未定|\b(?:unknown|undecided|TBD)\b/iu.test(candidates[0]!.statement) ? candidates[0] : undefined;
   return project.items.filter(active).filter((item) => {
+    if (sole?.id === item.id) return true;
     const body = text(item);
     if (rule.id === "security.user-isolation") return dataIsolationRule(item);
     if (rule.id === "game.privacy" && item.type === "data_entity") return item.statement.split(/[。；;\n]/u).some(clause =>
@@ -166,12 +171,13 @@ function ruleResults(project: Project): ProfileRuleResult[] {
       const app = payment.not_applicable ? "NOT_APPLICABLE" : payment.conflict ? "UNRESOLVED" :
         payment.current_ids.length ? "APPLICABLE" : applicability(project, rule.applicability).value;
       return {rule_id: rule.id, area: rule.area, label: rule.label, minimum_mode: rule.minimum_mode,
-        applicability: app as Applicability, considered: payment.not_applicable || payment.failure_ids.length > 0,
-        confirmed: payment.not_applicable || !payment.conflict && payment.failure_ids.length > 0,
-        evidence_ids: payment.not_applicable || payment.conflict ? [...payment.exclusion_ids, ...payment.current_ids] : payment.failure_ids};
+        applicability: app as Applicability, considered: app === "NOT_APPLICABLE" || payment.failure_ids.length > 0,
+        confirmed: app === "NOT_APPLICABLE" || !payment.conflict && payment.failure_ids.length > 0,
+        evidence_ids: payment.not_applicable || payment.conflict ? [...payment.exclusion_ids, ...payment.current_ids] :
+          app === "NOT_APPLICABLE" ? notApplicableEvidence(project, rule.applicability).map(item => item.id) : payment.failure_ids};
     }
     const app = applicability(project, rule.applicability).value;
-    const hits = app === "NOT_APPLICABLE" ? [] : evidence(project, rule);
+    const hits = app === "NOT_APPLICABLE" ? notApplicableEvidence(project, rule.applicability) : evidence(project, rule);
     return {rule_id: rule.id, area: rule.area, label: rule.label, minimum_mode: rule.minimum_mode,
       applicability: app, considered: app === "NOT_APPLICABLE" || hits.length > 0,
       confirmed: app === "NOT_APPLICABLE" || hits.some((item) => item.status === "CONFIRMED"),

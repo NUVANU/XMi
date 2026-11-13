@@ -4,7 +4,7 @@ import { canonical, fingerprint } from "./validation.ts";
 import { isRiskScopeDeferred } from "./completeness-service.ts";
 import { paymentScope } from "./payment-scope.ts";
 import { dataIsolationRule } from "./profile-rules.ts";
-import { hasAccountOrPrivateScope } from "./scope-exclusions.ts";
+import {hasAccountOrPrivateScope} from "./scope-exclusions.ts";
 
 export const auditFindingSchema = z.strictObject({
   id: z.string().regex(/^AUDIT-FINDING-[A-Z0-9-]+$/),
@@ -48,6 +48,9 @@ function finding(category: string, message: string, affectedIds: string[], quest
     severity: "BLOCKING", category, message, affected_ids: [...affectedIds].sort(), suggested_question: question};
 }
 
+function accountOrPrivate(project: Project): boolean {
+  return project.items.filter(active).some(hasAccountOrPrivateScope);
+}
 function hasConfirmed(project: Project, types: Item["type"][], pattern: RegExp): boolean {
   return confirmed(project).some((item) => types.includes(item.type) && pattern.test(body(item)));
 }
@@ -72,7 +75,7 @@ export class AuditService {
       "A material P0/P1 assumption or inference remains non-confirmed and must not be presented as an authoritative product fact.",
       hidden.map((item) => item.id), "Confirm, reject or explicitly keep the material assumption non-authoritative before readiness."));
 
-    const privateScope = snapshot.items.filter(active).some(hasAccountOrPrivateScope);
+    const privateScope = accountOrPrivate(snapshot);
     if (privateScope && !snapshot.items.some(dataIsolationRule)) {
       findings.push(finding("DATA_ISOLATION", "Account/private-data scope exists without a confirmed data-isolation rule.", [],
         "What confirmed rule prevents one user or tenant from accessing another user's private data?"));

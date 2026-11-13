@@ -148,6 +148,24 @@ test("M13 game options are engines, not managed web; missing visual goals stay u
   assert.doesNotMatch(proposal.blueprint_detail!.deployment_topology, /Web client/);
 });
 
+test("M13 browser-only selection uses confirmed positive constraints and preserves remote conflicts", () => {
+  for (const statement of ["并非仅在本地浏览器运行。", "是否仅在本地浏览器运行？", "仅在本地浏览器运行，待确认。",
+    "Not local browser-only; cloud only."]) {
+    const p = project(); p.items[3]!.statement = statement;
+    assert.equal(recommendSolutions(p).browserOnly, false, statement);
+  }
+  const p = project(); p.items[3]!.statement = "Runs only in the local browser; data is stored in page memory.";
+  p.items[3]!.status = "PROPOSED";
+  assert.equal(recommendSolutions(p).browserOnly, false);
+  p.items[3]!.status = "CONFIRMED";
+  assert.equal(recommendSolutions(p).browserOnly, true);
+  p.items.push(item("CLOUD-REQUIRED", "No payments; users require cloud sync.", "functional_requirement"));
+  const result = new SolutionService().review(p, source);
+  assert.equal(result.status, "BLOCKED_PREREQUISITES");
+  assert.match(result.limitation, /CLOUD-REQUIRED/);
+  assert.throws(() => new SolutionService().propose(p, source), /SOLUTION_PREREQUISITES_INCOMPLETE/);
+});
+
 test("M13 confirmed specified technologies win and proposed mentions do not", () => {
   const p = project();
   const preference = item("STACK-M13", "Use Vue with Java Spring Boot.", "solution_constraint", ["technology-choice"]);

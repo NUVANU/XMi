@@ -98,7 +98,7 @@ export const WEB_MICRO_SAAS_V0_RULES: readonly ProfileRule[] = [
   r("commercial.subscription", "COMMERCIAL", "subscription start/change/cancel", "FAST_DEVELOPMENT", "COMMERCIAL",
     ["functional_requirement", "flow", "decision"], ["subscription"], ["subscription", "plan", "cancel", "订阅", "套餐", "取消"]),
   r("commercial.payment-failure", "COMMERCIAL", "payment failure", "FAST_DEVELOPMENT", "COMMERCIAL",
-    ["functional_requirement", "acceptance_criterion", "decision"], ["payment-failure"], ["payment fail", "card declined", "billing fail", "charge fail", "支付失败", "扣款失败", "付款失败"]),
+    ["functional_requirement", "acceptance_criterion", "decision"], ["payment-failure"], ["payment fail", "card declined", "billing fail", "charge fail", "支付失败", "扣款失败", "付款失败", "充值失败"]),
   r("commercial.refund-support", "COMMERCIAL", "refund/support policy as product behavior", "PRODUCT_GRADE", "COMMERCIAL",
     ["decision", "functional_requirement"], ["refund"], ["refund", "chargeback", "退款", "退费"]),
   r("commercial.usage-limits", "COMMERCIAL", "usage limits", "FAST_DEVELOPMENT", "COMMERCIAL",
@@ -116,7 +116,7 @@ export const WEB_MICRO_SAAS_V0_RULES: readonly ProfileRule[] = [
     ["functional_requirement", "flow", "decision"], ["manual-fallback"], ["manual alternative", "manual fallback", "人工替代", "手动备用"]),
 
   r("security.data-sensitivity", "SECURITY_PRIVACY", "data sensitivity", "FAST_VALIDATION", "ALWAYS",
-    ["decision", "risk", "data_entity", "constraint"], ["data-sensitivity"], ["sensitive", "personal data", "pii", "敏感", "个人数据", "隐私"]),
+    ["decision", "risk", "data_entity", "constraint"], ["data-sensitivity"], ["sensitive", "public data", "personal data", "pii", "敏感", "公开数据", "个人数据", "隐私"]),
   r("security.user-isolation", "SECURITY_PRIVACY", "user isolation", "FAST_DEVELOPMENT", "ACCOUNT_OR_PRIVATE",
     ["permission_rule", "functional_requirement"], ["isolation"], ["isolation", "tenant", "own data", "隔离", "租户", "自己的数据"]),
   r("security.admin-access", "SECURITY_PRIVACY", "administrator access", "PRODUCT_GRADE", "ACCOUNT_OR_PRIVATE",
@@ -129,7 +129,7 @@ export const WEB_MICRO_SAAS_V0_RULES: readonly ProfileRule[] = [
     ["risk", "decision", "constraint", "exclusion"], ["regulated", "high-risk"], ["regulated", "medical", "health", "biometric", "监管", "医疗", "健康", "生物识别"]),
 
   r("nfr.devices-browsers", "NON_FUNCTIONAL", "supported devices/browsers", "FAST_DEVELOPMENT", "ALWAYS",
-    ["non_functional_requirement", "constraint"], ["device", "browser"], ["browser", "mobile", "desktop", "device", "浏览器", "移动端", "桌面"]),
+    ["non_functional_requirement", "constraint", "solution_constraint"], ["device", "browser"], ["browser", "mobile", "desktop", "device", "浏览器", "移动端", "桌面"]),
   r("nfr.scale", "NON_FUNCTIONAL", "expected scale", "FAST_DEVELOPMENT", "ALWAYS",
     ["non_functional_requirement", "constraint"], ["scale"], ["scale", "concurrent", "users", "并发", "规模", "用户量"]),
   r("nfr.response-time", "NON_FUNCTIONAL", "response time expectations", "FAST_DEVELOPMENT", "ALWAYS",

@@ -14,6 +14,7 @@ test("native design activation persists through short continuations and is isola
   const prompt = (text: string, id = session) => processUserPrompt({hook_event_name: "UserPromptSubmit",
     session_id: id, turn_id: randomUUID(), prompt: text}, directory, directory);
   assert.ok(prompt("启用 XMi，继续 Blazing Warband 的 XSpec").startsWith(designScopeReminder));
+  assert.match(prompt("继续"), /流程图默认自上而下，Mermaid 使用 flowchart TB/u);
   for (const text of ["继续", "下一步", "帮我做 Unity 原型", "生成角色立绘", "确认好了"]) {
     assert.ok(prompt(text).startsWith(designScopeReminder));
   }

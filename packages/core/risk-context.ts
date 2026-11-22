@@ -1,5 +1,14 @@
 import type {Item} from "../shared-types/domain.ts";
 
+// Clarify a generated acceptance proposal before it is shown for approval.
+// The original rule stays intact: bounded local patch approval tied to call_id.
+export function clarifyLocalPatchAcceptance(statement: string): string {
+  if (!/项目允许范围.{0,24}授权无法核对/u.test(statement) || !/保留手动审批/u.test(statement)) return statement;
+  const clarified = statement.replace(/核对合规补丁(?=仅产生一次绑定原\s+call_id\s+的代审回执)/gu,
+    "核对满足当前项目代审条件的补丁");
+  return clarified.length <= 8000 ? clarified : statement;
+}
+
 // Remove only specific operational terms, never the rest of a mixed statement.
 // Negation, future plans and ambiguous intent still require Owner review.
 export function riskContext(statement: string): string {

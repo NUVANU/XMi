@@ -5,6 +5,7 @@ import {specReviewStatusSchema, hostSpecReviewStatusSchema} from "../../packages
 import {documentReviewStatusSchema} from "../../packages/core/document-review.ts";
 import {deliveryWorkflowSchema} from "../../packages/core/document-delivery.ts";
 import {issueHandlingSchema,issueHandlingSummarySchema} from "../../packages/core/issue-handling.ts";
+import {prototypeDraftSchema, prototypePreviewSchema} from "../../packages/core/prototype-preview.ts";
 
 const id = z.string().regex(/^XMI-[A-Z0-9-]+$/).max(100);
 const version = z.number().int().positive();
@@ -30,6 +31,9 @@ const project = {...base, project_id: id, project_directory: projectDirectory.op
 const mutation = {...project, expected_version: version, idempotency_key: z.string().min(1).max(100)};
 const itemAction = {...mutation, item_id: z.string().min(3).max(100), item_version: version, fingerprint: hash};
 const page = {offset: z.number().int().min(0).max(100000).optional(), limit: z.number().int().min(1).max(20).optional()};
+const summaryDetail = z.literal("summary").optional();
+const exactItemIds = z.array(z.string().min(3).max(100)).min(1).max(5)
+  .refine(ids => new Set(ids).size === ids.length, "Item IDs must be unique.");
 const interviewModule = z.string().trim().min(1).max(80);
 const nativeSession = z.string().regex(/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i).optional();
 const patchInput = z.strictObject({...mutation, patch: z.strictObject({kind: z.literal("ADD_CANDIDATE"), candidate})});
@@ -55,24 +59,33 @@ export const singleReviewRequest = z.discriminatedUnion("operation", [
   ...policyReviewRequest.options,
 ]);
 export const inputs = {
+  xmi_prototype_preview: z.strictObject({...project, expected_version: version, draft: prototypeDraftSchema}),
   xmi_spec_review_start: z.strictObject({...mutation, session_id: nativeSession, interview_module: interviewModule.optional()}),
   xmi_spec_review_status: z.strictObject({...project, run_id: z.string().uuid().optional(), session_id: nativeSession, ...page}),
   xmi_item_review_prepare: z.union([
     z.strictObject({...base, project_directory: projectDirectory.optional(), request: singleReviewRequest, session_id: nativeSession}),
     z.strictObject({...project, expected_version: version, requests: z.array(singleReviewRequest).min(1).max(50),
-      session_id: nativeSession, validate_after_commit: z.literal(true).optional(), issue_handling:issueHandlingSchema.optional()}),
+      session_id: nativeSession, validate_after_commit: z.literal(true).optional(), issue_handling:issueHandlingSchema.optional(),
+      preserve_blueprint_choices: z.literal(true).optional()}),
   ]),
   xmi_item_review_status: z.strictObject({...project, session_id: nativeSession}),
-  xmi_item_review_commit: z.strictObject({...project, expected_version: version, review_id: z.string().uuid(), session_id: nativeSession}),
+  xmi_item_review_commit: z.strictObject({...project, expected_version: version, review_id: z.string().uuid(), session_id: nativeSession,
+    validation_detail: summaryDetail}),
   xmi_module_review_prepare: z.strictObject({...project, expected_version: version, interview_module: interviewModule, session_id: nativeSession}),
   xmi_module_review_status: z.strictObject({...project, session_id: nativeSession}),
   xmi_module_review_commit: z.strictObject({...project, expected_version: version, review_id: z.string().uuid(), session_id: nativeSession}),
   xmi_project_create: z.strictObject({...base, project_directory: projectDirectory.optional(), title: z.string().min(1).max(200).optional(),
     initial_idea: z.string().min(1).max(8000), requested_profile: productProfileSchema.exclude(["unsupported"]).optional(),
     source_ref: boundedSource, idempotency_key: z.string().min(1).max(100)}),
-  xmi_project_get: z.strictObject({...project, ...page, expected_version: version.optional()}),
-  xmi_project_resume: z.strictObject({...project, question_count: z.number().int().min(1).max(8).optional(),
-    interview_module: interviewModule.optional()}),
+  xmi_project_get: z.union([
+    z.strictObject({...project, ...page, expected_version: version.optional()}),
+    z.strictObject({...project, expected_version: version, item_ids: exactItemIds}),
+  ]),
+  xmi_project_resume: z.union([
+    z.strictObject({...project, question_count: z.number().int().min(1).max(8).optional(), interview_module: interviewModule.optional()}),
+    z.strictObject({...project, detail: z.literal("incremental"), since_version: version.optional(),
+      expected_version: version.optional(), ...page}),
+  ]),
   xmi_document_assess: z.strictObject({...project, expected_version: version,
     file_path: z.string().min(1).max(1000)}),
   xmi_answer_analyze: z.strictObject({...project, expected_version: version,
@@ -95,7 +108,7 @@ export const inputs = {
   xmi_audit_run: z.strictObject({...project, expected_version: version}),
   xmi_readiness_evaluate: z.strictObject({...project, expected_version: version}),
   xmi_xspec_compile: z.strictObject({...project, expected_version: version}),
-  xmi_xspec_validate: z.strictObject({...project, expected_version: version}),
+  xmi_xspec_validate: z.strictObject({...project, expected_version: version, detail: summaryDetail}),
   xmi_export_package: z.strictObject({...mutation, package_name: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/),
     overwrite: z.boolean().optional()}),
 };
@@ -108,9 +121,10 @@ export const errorSchema = z.strictObject({
 });
 const receipt = z.strictObject({project_id: id, model_version: version, next_action: z.string()});
 const target = z.enum(["PROTOTYPE_READY", "BUILD_READY", "PRODUCT_SPEC_READY"]);
+const itemStatus = z.enum(["CONFIRMED", "INFERRED", "PROPOSED", "ASSUMED", "OPEN", "BLOCKING", "REJECTED", "SUPERSEDED"]);
 const itemView = z.strictObject({id: z.string(), type: candidateSchema.shape.type,
   statement: z.string().max(400), statement_truncated: z.boolean(),
-  status: z.enum(["CONFIRMED", "INFERRED", "PROPOSED", "ASSUMED", "OPEN", "BLOCKING", "REJECTED", "SUPERSEDED"]),
+  status: itemStatus,
   version, fingerprint: hash,
   source_refs: z.array(z.strictObject({type: sourceSchema.shape.type, ref: z.string().max(160)})).max(3),
   source_refs_truncated: z.boolean(),
@@ -123,6 +137,38 @@ const view = z.strictObject({
   next_offset: z.number().int().nonnegative().nullable(),
   blockers: z.array(z.strictObject({id: z.string(), question: z.string().max(400)})).max(10),
   blockers_truncated: z.boolean(), mode_selection_required: z.boolean(),
+});
+const exactItemView = candidateSchema.extend({status: itemStatus, version, fingerprint: hash,
+  created_at: z.string(), updated_at: z.string(), confirmed_at: z.string().nullable().optional(),
+  confirmed_by: z.string().nullable().optional()});
+const count = z.number().int().nonnegative();
+const itemRef = z.strictObject({id: z.string(), version, type: candidateSchema.shape.type, status: itemStatus});
+const shortDelivery = z.strictObject({
+  stage: deliveryWorkflowSchema.shape.stage,
+  formal_assurance: deliveryWorkflowSchema.shape.formal_assurance,
+  review_state: deliveryWorkflowSchema.shape.document_review.shape.state,
+  review_run_id: deliveryWorkflowSchema.shape.document_review.shape.run_id,
+  reviewed_model_version: version.nullable(),
+  review_source_verified: z.boolean(),
+  finding_count: count, question_count: count, note_count: count,
+  delivery_triage: deliveryWorkflowSchema.shape.document_review.shape.delivery_triage,
+  next_action: deliveryWorkflowSchema.shape.next_action,
+});
+const incrementalResume = z.strictObject({
+  detail: z.literal("incremental"), project_id: id, model_version: version, title: z.string(),
+  lifecycle_state: z.string(), effective_mode: modeSchema.nullable(), readiness_target: target.nullable(),
+  readiness_status: z.literal("NOT_EVALUATED"), snapshot_consistent: z.literal(true),
+  since_version: version.nullable(), change_status: z.enum(["OVERVIEW", "UNCHANGED", "CHANGED", "BASELINE_UNAVAILABLE"]),
+  policy_changed: z.boolean().nullable(), questions_changed: z.boolean().nullable(),
+  changed_items: z.array(itemRef.extend({change: z.enum(["ADDED", "UPDATED", "REMOVED"]),
+    excerpt: z.string().max(120).optional()})).max(20),
+  change_count: count.nullable(), next_offset: count.nullable(),
+  pending_items: z.array(itemRef).max(6), pending_item_count: count,
+  open_questions: z.array(z.strictObject({id: z.string(), status: z.enum(["OPEN", "BLOCKING"]),
+    priority: z.enum(["P0", "P1", "P2", "P3"]), excerpt: z.string().max(120)})).max(6),
+  open_question_count: count, blocking_question_count: count,
+  related_acceptance_ids: z.array(z.string()).max(12), related_acceptance_count: count,
+  delivery_workflow: shortDelivery,
 });
 const modePolicy = z.strictObject({
   requested_mode: modeSchema, effective_mode: modeSchema, readiness_target: target,
@@ -209,8 +255,21 @@ const xspecValidation = z.strictObject({
 });
 const xspecValidationResult = z.strictObject({project_id: id, model_version: version,
   validation: xspecValidation, delivery_workflow: deliveryWorkflowSchema});
+const shortValidationResult = z.strictObject({detail: z.literal("summary"), project_id: id, model_version: version,
+  validation: z.strictObject({
+    valid: z.boolean(), package_valid: z.boolean(),
+    error_count: count, error_codes: z.array(z.string()).max(8),
+    consumers: z.strictObject({xui: z.boolean(), xdev: z.boolean()}),
+    readiness_evaluation: z.strictObject({
+      target: target.nullable(), readiness_status: readinessEvaluation.shape.readiness_status, hard_gate_ready: z.boolean(),
+      hard_gates: z.array(hardGate.pick({gate: true, status: true})), mode_gates: z.array(hardGate.pick({gate: true, status: true})),
+    }),
+  }),
+  delivery_workflow: shortDelivery,
+});
+const validationResult = z.union([xspecValidationResult, shortValidationResult]);
 const postCommitValidation = z.discriminatedUnion("ok", [
-  z.strictObject({ok: z.literal(true), data: xspecValidationResult}),
+  z.strictObject({ok: z.literal(true), data: validationResult}),
   z.strictObject({ok: z.literal(false), error: errorSchema}),
 ]);
 
@@ -236,6 +295,7 @@ const moduleReview = z.strictObject({module: interviewModule,
   completion: z.literal("NOT_EVALUATED")});
 
 const successData = {
+  xmi_prototype_preview: prototypePreviewSchema,
   xmi_spec_review_start: z.union([specReviewStatusSchema, hostSpecReviewStatusSchema, documentReviewStatusSchema]),
   xmi_spec_review_status: z.union([specReviewStatusSchema, hostSpecReviewStatusSchema, documentReviewStatusSchema]),
   xmi_item_review_prepare: z.strictObject({project_id: id, model_version: version, review_id: z.string().uuid(),
@@ -244,7 +304,8 @@ const successData = {
     status: z.enum(["NONE", "PENDING", "GRANTED", "APPLIED", "INVALIDATED", "FAILED", "STALE"]), applied_version: version.nullable(),handling_summary:issueHandlingSummarySchema.optional()}),
   xmi_item_review_commit: receipt.extend({post_commit_validation: postCommitValidation.optional(),handling_summary:issueHandlingSummarySchema.optional()}),
   xmi_project_create: receipt,
-  xmi_project_get: view,
+  xmi_project_get: z.union([view, z.strictObject({detail: z.literal("items"), project_id: id, model_version: version,
+    items: z.array(exactItemView).min(1).max(5)})]),
   xmi_document_assess: z.strictObject({project_id: id, model_version: version,
     sha256: hash, format: z.enum(["md", "txt", "docx", "pdf"]), sections_scanned: z.number().int().nonnegative(),
     truncated: z.boolean(), candidates: z.array(candidate).max(40),
@@ -254,14 +315,14 @@ const successData = {
       severity: z.literal("BLOCKING")})).max(40),
     ambiguities: z.array(z.strictObject({terms: z.array(z.string()), question: z.string(),
       source_refs: z.array(boundedSource).max(10)})), next_questions: z.array(z.unknown()).max(8), warning: z.string()}),
-  xmi_project_resume: z.strictObject({project: view, snapshot_consistent: z.boolean(), delivery_workflow: deliveryWorkflowSchema,
+  xmi_project_resume: z.union([incrementalResume, z.strictObject({project: view, snapshot_consistent: z.boolean(), delivery_workflow: deliveryWorkflowSchema,
     recent_event_ids: z.array(z.string()).max(10), next_action: z.string(),
     question_selection_status: z.literal("AVAILABLE"),
     resume_packet: z.strictObject({project_id: id, model_version: version, mode: modeSchema.nullable(),
       recent_confirmed: z.array(z.strictObject({id: z.string(), type: candidateSchema.shape.type, statement: z.string()})).max(8),
       blockers: z.array(z.strictObject({id: z.string(), question: z.string()})).max(5),
       next_questions: z.array(z.unknown()).max(8), module_review: moduleReview.nullable(), bounded: z.literal(true)}),
-    solution_review: solutionReview}),
+    solution_review: solutionReview})]),
   xmi_answer_analyze: z.strictObject({project_id: id, model_version: version,
     analysis_status: z.literal("DETERMINISTIC_M4"),
     structural_conflicts: z.array(z.enum(["DUPLICATE_ITEM_ID"])),
@@ -299,7 +360,7 @@ const successData = {
   xmi_readiness_evaluate: z.strictObject({project_id: id, model_version: version, audit: auditResult, readiness: readinessEvaluation, delivery_workflow: deliveryWorkflowSchema}),
   xmi_xspec_compile: z.strictObject({project_id: id, model_version: version, status: z.literal("CANDIDATE_NOT_READY_M8"),
     artifact: compiledArtifact, scope_override_normalisations: z.array(scopeOverrideNormalisation), delivery_workflow: deliveryWorkflowSchema}),
-  xmi_xspec_validate: xspecValidationResult,
+  xmi_xspec_validate: validationResult,
   xmi_export_package: z.strictObject({project_id: id, model_version: version, spec_id: z.string().regex(/^XSPEC-[A-Z0-9-]+$/),
     spec_version: z.string().regex(/^[0-9]+\.[0-9]+\.[0-9]+$/), canonical_sha256: hash, file_count: z.literal(16),
     exported_relative_path: z.string().regex(/^(?:exports|docs\/xspec)\/[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/), already_present: z.boolean(),
@@ -315,18 +376,19 @@ export const outputs = Object.fromEntries(Object.entries(successData).map(([name
 ])) as unknown as Record<ToolName, z.ZodType>;
 
 export const metadata: Record<ToolName, {title: string; description: string; write: boolean; destructive: boolean}> = {
-  xmi_spec_review_start: {title: "Optional document rereview", description: "Full-spec review automatically includes the same-version complete system architecture design generated from confirmed choices, with no new document confirmation; inspect requirement/module/contract/data/state/failure consistency. Run automatically after local audit passes under the Owner-configured review cycle, or on a separate explicit request. No extra review-start confirmation; never an export prerequisite. Native Codex freezes readable specification documents, or interview_module statements and directly linked settings. Follow host_job to launch one fresh-context Agent; reuse the original key/version/session/module to collect its native result. Return issues, exact supplied quotes, impact, suggestions and missing-material questions; do not enumerate covered IDs/files/scopes. Invalid findings are reported separately while grounded findings survive; extra unresolved references are follow-up hints. No full Product Model is sent to the Agent. Historical strict runs remain readable. Generic hosts without this adapter remain UNAVAILABLE. Advisory only: cannot confirm decisions, grant formal assurance, select providers or approve export.", write: true, destructive: false},
+  xmi_prototype_preview: {title: "Prepare DreamKids design and flow preview", description: "For opted-in DreamKids hosts. After the interview, summarize the user's intent as a draft, describe what the first version will do, and provide the player or tool-user flow, including branching and retry where relevant. Collect all unresolved experience choices together. Use private, local, sample-only defaults for technical details. Returns a read-only version-bound preview for the host's chat option 确认输出开发文档. Product Model approval, execution, sharing and billing are outside this tool.", write: false, destructive: false},
+  xmi_spec_review_start: {title: "Optional document rereview", description: "Full-spec review includes the current architecture. Existing designs use the last completed review as a comparison and focus on confirmed changes, linked acceptance, and direct effects; complete documents provide context. The server reports which findings need an Owner choice, verification, follow-up or reuse of an exact confirmed rule. Run automatically after local audit passes under the Owner-configured review cycle, or on a separate explicit request. No extra review-start confirmation; never an export prerequisite. Native Codex freezes readable specification documents, or interview_module statements and directly linked settings. Follow host_job to launch one fresh-context Agent; reuse the original key/version/session/module to collect its native result. Return issues, exact supplied quotes, impact, suggestions and missing-material questions; do not enumerate covered IDs/files/scopes. Invalid findings are reported separately while grounded findings survive; extra unresolved references are follow-up hints. No full Product Model is sent to the Agent. Historical strict runs remain readable. Generic hosts without this adapter remain UNAVAILABLE. Advisory only: cannot confirm decisions, grant formal assurance, select providers or approve export.", write: true, destructive: false},
   xmi_spec_review_status: {title: "Read document rereview suggestions", description: "Read-only version-bound document rereview status and paginated suggestions, questions and notes. Never launches an Agent or commits a result; use the original start request to collect once. Native sources and supplied quotations are checked without a coverage ledger. Invalid individual findings do not discard grounded suggestions. Empty findings are not PASS; advisory severity never changes readiness. Historical strict results retain their original contract. Cannot accept reviewer JSON, confirm product changes or approve export.", write: false, destructive: false},
   xmi_item_review_prepare: {title: "Prepare chat confirmation list", description: "Recommend the exact two-character reply 确认 for whole-list agreement across single, module, finalization and issue-handling reviews. Legacy confirmation replies remain compatible. For failed local/independent review issues, use requests plus issue_handling with one matching issue (id/problem/impact/recommendation/affected_ids, optional replacement_text) per request. The genuine numbered handling reply itself grants exact selected actions, ordinary text edits or listed structured options; ignore/defer retain prior content. No second confirmation follows handling. Issue mode automatically validates after commit. For initial finalization collect known pending settings, selected decisions, blueprints and risk dispositions into one numbered batch via requests (1-50), top-level project_id/expected_version; every row uses the same base version. A mode change must be first; duplicate targets, proposal creation and invalid dependency orders refuse before asking the Owner. Preserve blueprint freshness and risk gates. Use request for a single action outside finalization. Prepare a complete readable chat list for an item action, PROPOSED blueprint save, delivery-mode selection/upgrade or exact risk resolution/withdrawal. Pass current native hook session_id only as routing. Display the entire review_text in the final chat response; only the genuine next Owner reply confirms the exact displayed operation. For the last batch in finalization, set validate_after_commit to true to run the normal read-only XSpec check immediately after successful application. Omit it for intermediate or confirmation-only batches. Preparation grants no Owner authority and does not change canonical Product Model state. Never use per-item popup forms in native-chat mode.", write: false, destructive: false},
   xmi_item_review_status: {title: "Read single-item native reply receipt", description: "Read the current chat's single-item review metadata with canonical version read-back. GRANTED records a genuine reply but still needs xmi_item_review_commit; APPLIED proves execution. Pass session_id from the genuine current hook as routing only. APPLIED describes the requested operation; saving a proposal does not confirm it. This read cannot approve anything.", write: false, destructive: false},
-  xmi_item_review_commit: {title: "Apply a genuinely authorized single-item review", description: "Apply the exact initial confirmation or issue-handling choice already granted by the genuine native UserPromptSubmit event after displayed-list verification. In issue mode return handling_summary and same-call validation; a handling reply needs no additional approval. Requires its current review ID, project version and session routing; model arguments cannot supply approval, actor or user text. No additional popup or human reply is requested. For a finalization batch marked validate_after_commit, report the post_commit_validation result separately from the successful write. The same call generates the current architecture design and reports its location/version in delivery_workflow.system_architecture. Reuse that result without repeating the check or asking the Owner to approve old content or the architecture rendering. Without the private original-event grant, changed state or mismatched binding refuses the write. Read canonical state after success; proposal saving remains unconfirmed.", write: true, destructive: true},
+  xmi_item_review_commit: {title: "Apply a genuinely authorized single-item review", description: "Apply the exact initial confirmation or issue-handling choice already granted by the genuine native UserPromptSubmit event after displayed-list verification. In issue mode return handling_summary and same-call validation; use validation_detail summary to request its shorter projection; a handling reply needs no additional approval. Requires its current review ID, project version and session routing; model arguments cannot supply approval, actor or user text. No additional popup or human reply is requested. For a finalization batch marked validate_after_commit, report the post_commit_validation result separately from the successful write. The same call generates the current architecture design and reports its location/version in delivery_workflow.system_architecture. Reuse that result without repeating the check or asking the Owner to approve old content or the architecture rendering. Without the private original-event grant, changed state or mismatched binding refuses the write. Read canonical state after success; proposal saving remains unconfirmed.", write: true, destructive: true},
   xmi_module_review_prepare: {title: "Prepare module-end confirmation list", description: "Local Codex only: prepare the next batch of at most 50 ordinary pending items tagged with this module at the exact project version, in canonical item order. Each real reply confirms only the displayed batch; refresh state and prepare another batch if pending items remain. Pass session_id from current native XMi hook context; it is a routing selector, never approval. Display the complete returned review_text; ask the Owner to reply 确认 or numbered changes. Does not confirm anything. Requires an actual native hook record for that session; never fall back to repeated item forms.", write: true, destructive: false},
   xmi_module_review_status: {title: "Check native module confirmation receipt", description: "Read module review receipt and canonical version using session_id from current native XMi hook context. The selector grants no Owner authority; missing launch environment does not block a valid explicit route. No approval input accepted. Actual next native user prompt plus displayed-list check remains necessary; refresh canonical state before claiming success.", write: false, destructive: false},
   xmi_module_review_commit: {title: "Commit native module approval", description: "Local Codex only. Commit only a GRANTED module review persisted by the trusted native hook after the actual next Owner reply and complete display validation. Routing and exact review binding are not approval. Never supply approved, actor, prompt or source. The batch is atomic; retry the same binding after a transient failure or missing sidecar receipt without creating another review. Read canonical state after success. No grant, invalidated list, changed scope or wrong binding must fail; never reconstruct a grant from MATCH diagnostics.", write: true, destructive: false},
   xmi_project_create: {title: "Start XMi project", description: "Use to start an idea-to-spec project, not to build an app. Local runtime requires project_directory: use the verified user project root as the default, or ask once if unavailable; never infer MCP cwd. Saves one project-local canonical DB and readable process materials after host form approval. Existing shared projects are not migrated; the idea remains unconfirmed.", write: true, destructive: false},
-  xmi_project_get: {title: "Read XMi project", description: "Use to inspect a known project's paginated canonical items and fingerprints. Supply project_directory when opening a moved folder or from a new host; identity must match .xmi/project.json. storage.context_status distinguishes current and stale readable files; Markdown edits are not approval. Not a general conversation or other-project search. Readiness is not evaluated in M2.", write: false, destructive: false},
+  xmi_project_get: {title: "Read XMi project", description: "Use to inspect a known project's paginated canonical items and fingerprints. On an exact expected_version, item_ids returns those complete items with source references; no pagination on that route. Supply project_directory when opening a moved folder or from a new host; identity must match .xmi/project.json. storage.context_status distinguishes current and stale readable files; Markdown edits are not approval. Not a general conversation or other-project search. Readiness is not evaluated in M2.", write: false, destructive: false},
   xmi_document_assess: {title: "Assess an existing design document", description: "Use only for an Owner-selected local Markdown, TXT, DOCX or PDF file after a trusted host form approves reading that exact path. Returns bounded unconfirmed proposals with source digest and positions. It does not persist the file or any claim.", write: false, destructive: false},
-  xmi_project_resume: {title: "Resume XMi project", description: "Use to resume a known project's concrete module review brief: current design, pending decisions with host recommendations, effects/conflicts and one numbered batch reply. Use project_directory plus the original project_id to resume a portable folder on another host; read XMI-START-HERE.md first. Returns bounded saved rows and pending decisions, not a one-detail-at-a-time interview. It never confirms content or evaluates completion.", write: false, destructive: false},
+  xmi_project_resume: {title: "Resume XMi project", description: "For routine continuation use detail incremental with since_version to read changed IDs, pending counts and related acceptance. Page on the exact returned version. Read exact items or use the full resume when scope cannot be established. The full route returns the concrete module review brief: current design, pending decisions with host recommendations, effects/conflicts and one numbered batch reply. Use project_directory plus the original project_id to resume a portable folder on another host; read XMI-START-HERE.md first. Returns bounded saved rows and pending decisions, not a one-detail-at-a-time interview. It never confirms content or evaluates completion.", write: false, destructive: false},
   xmi_answer_analyze: {title: "Analyze an interview answer", description: "Use to extract PROPOSED candidates and flag possible conflicts. With interview_module, returns saved context and a MODULE_REVIEW_BRIEF contract for current design, pending decisions with host recommendations, effects and batch reply. Present the whole module brief after saving, not just the latest answer. It does not persist or confirm.", write: false, destructive: false},
   xmi_patch_apply: {title: "Save an unconfirmed candidate", description: "Use to add one reviewed non-confirmation candidate. A non-blueprint PROPOSED draft sourced only from conversation turns or documents saves without a host form and retains its provenance; inferred, assumed, blueprint and other-source proposals still require Owner review. In local native-chat mode, use xmi_item_review_prepare for blueprint proposal saving instead of this form path. This tool never confirms an item or selects a mode, and cannot perform arbitrary updates, deletion or implementation tasks.", write: true, destructive: false},
   xmi_item_confirm: {title: "Ask Owner to confirm an item", description: "For hosts using form/page review, request explicit Owner confirmation of an exact item/version/fingerprint. In local native-chat mode use xmi_item_review_prepare and the genuine reply grant instead; this endpoint refuses new popup writes. Structured decisions use DECISION_APPROVED; M6 solution blueprints require an explicit APPROVE_BLUEPRINT or DELEGATE_WITHIN_BLUEPRINT disposition and dedicated events. Model text, actor fields and tool approval hints cannot authorize any of them.", write: true, destructive: true},
@@ -341,6 +403,6 @@ export const metadata: Record<ToolName, {title: string; description: string; wri
   xmi_audit_run: {title: "Run bounded independent audit", description: "Checks specification quality locally before XSpec delivery; never requires external model setup. Returns delivery_workflow with the actual full-spec document review status separately from formal assurance. Runs M8 deterministic audit rules against a bounded cloned Product Model snapshot. It has no Product Model mutation path and reports the current isolation/independent-review limitation explicitly rather than converting unavailable dependencies into a pass.", write: false, destructive: false},
   xmi_readiness_evaluate: {title: "Evaluate M8 readiness gates", description: "Evaluates display dimensions separately from the hard and mode-specific gates using the current Product Model, XSpec consumer checks and bounded audit result. Also returns delivery_workflow for lightweight document review, revision, validation and export; unavailable formal isolation does not require a new audit platform for candidate delivery. Scores never override blockers and the tool does not mutate Product Model state.", write: false, destructive: false},
   xmi_xspec_compile: {title: "Compile XSpec candidate", description: "Deterministically compiles the canonical Product Model version into the published sixteen-file XSpec package shape. Compilation is derived only: it does not rewrite Product Model facts and remains a candidate until M8 hard gates are satisfied.", write: false, destructive: false},
-  xmi_xspec_validate: {title: "Validate XSpec candidate", description: "Runs schema, stable-ID/reference, P0/P1 acceptance coverage, manifest/integrity and XUi/XDev conformance-stub checks. Returns the actual document review and next delivery step. It is read-only and cannot convert compilation into formal readiness.", write: false, destructive: false},
+  xmi_xspec_validate: {title: "Validate XSpec candidate", description: "Runs schema, stable-ID/reference, P0/P1 acceptance coverage, manifest/integrity and XUi/XDev conformance-stub checks. Use detail summary for package verdict, error codes, each gate status and the next delivery step; omit detail for full evidence and diagnostics. It is read-only and cannot convert compilation into formal readiness.", write: false, destructive: false},
   xmi_export_package: {title: "Export validated XSpec package", description: "Writes the exact validated sixteen-file package under project docs/xspec for project-local storage, or controlled exports for legacy storage after trusted host-form approval. It refuses rather than warns: an unresolved blocking mode-risk, a blocking open question, an unapproved blueprint, a broken reference or an unsupported profile stops the write, while consumer compatibility is only reported. It may replace an existing named package only when overwrite is explicitly requested and approved; M8 reports READY_FOR_XDEV only when every hard and mode gate passes; otherwise the exported package remains NOT_READY.", write: true, destructive: true},
 };

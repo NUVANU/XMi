@@ -1,13 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { commandSchema, eventSchema, productProfileSchema } from "../shared-types/domain.ts";
-import type { Actor, Command, DomainEvent, Project, DeliveryMode } from "../shared-types/domain.ts";
+import type { Actor, Command, DomainEvent, Item, Project, DeliveryMode } from "../shared-types/domain.ts";
 import type { ProjectStore, StoreTransaction } from "../storage/store.ts";
 import { DomainError, requireCondition } from "./errors.ts";
 import { fingerprint, itemFingerprint, modeFingerprint, validateProject, rejectSecrets } from "./validation.ts";
 import { evaluateRisk, evaluateRiskLegacy, exclusionScopeIssues, riskResolutionRevision, invalidRiskOverrides } from "./completeness-service.ts";
 import { assessFeasibility } from "./solution-feasibility.ts";
-import { solutionBlockingInputs } from "./solution-options.ts";
+import { recommendSolutions, solutionBlockingInputs } from "./solution-options.ts";
 import { moduleConfirmationSchema } from "./module-confirmation.ts";
 import {actionConfirmationSchema, ownerReviewCommandSchema} from "./action-confirmation.ts";
 
@@ -19,6 +19,70 @@ const requestSchema = z.strictObject({
   project_id: z.string().regex(/^XMI-[A-Z0-9-]+$/), expected_version: z.number().int().nonnegative(),
   idempotency_key: z.string().min(1).max(200), command: commandSchema,
 });
+
+function currentBlueprint(project: Project) {
+  return project.items.findLast(item => item.type === "solution_blueprint" &&
+    item.status !== "REJECTED" && item.status !== "SUPERSEDED");
+}
+
+const clauses = (statement: string) => statement.split(/[。；;\n]+|(?<=[.!?])\s+/u)
+  .map(text => text.trim().replace(/[.!?]+$/u, "")).filter(Boolean);
+const reversal = /\b(?:never|instead|replace|remove|no longer|must not|cannot)\b|改用|改为|不再|取消原|替换原|移除原/u;
+const solutionChange = /(?:改由|替换|更换|迁移|移交|转由|改接|绕过).{0,24}(?:网关|前端|后端|接口|平台|供应商|服务商|支付商|部署|数据归属|存储)|\b(?:switch|migrate|replace|bypass|move)\b.{0,35}\b(?:provider|gateway|backend|frontend|database|platform|deployment|storage)\b/iu;
+const expandedAccess = /\b(?:new|all|other|external)\s+(?:customers?|users?|actors?)\b.{0,36}\baccess\b.{0,32}\b(?:records?|data)\b|(?:外部|其他|全部|所有)(?:组织|租户|用户|成员).{0,12}(?:可|能|可以|允许).{0,12}(?:读取|访问|修改|导出|下载).{0,14}(?:记录|数据|账单|附件)/iu;
+const architectureTerms = (text: string) => [...new Set(text.toLowerCase().match(
+  /本地|离线|本机|端侧|云端|自托管|跨境|\b(?:local(?:-only|-first)?|offline|cloud|on-device|on this device|on-premises|self-hosted|aws|gcp|azure|postgres(?:ql)?|sqlite|mysql|indexeddb|godot|unity|unreal)\b/gu,
+) ?? [])].sort();
+
+const changesSolution = (text: string) => reversal.test(text.toLowerCase()) || solutionChange.test(text) || expandedAccess.test(text);
+
+// Refresh source bindings only, including bounded corrections of existing
+// requirements explicitly approved together with unchanged technical choices.
+export function planBlueprintRefresh(before: Project, next: Project, commands: Command[]): Command | undefined {
+  const blueprint = currentBlueprint(before), detail = blueprint?.blueprint_detail;
+  if (blueprint?.status !== "CONFIRMED" || !detail?.owner_disposition ||
+    detail.feasibility_fingerprint !== assessFeasibility(before).fingerprint ||
+    !commands.every(command => command.kind === "ITEM_TEXT_REVISED")) return;
+  let rewrote = false;
+  const basis = commands.map(command => {
+    const old = before.items.find(item => item.id === command.item_id);
+    const updated = next.items.find(item => item.id === command.item_id);
+    if (old?.status !== "CONFIRMED" || !updated || ![
+      "functional_requirement", "acceptance_criterion", "non_functional_requirement", "integration", "solution_constraint",
+    ].includes(old.type)) return;
+    const appended = updated.statement.startsWith(old.statement + " ");
+    if (appended) {
+      const addition = updated.statement.slice(old.statement.length);
+      if (changesSolution(addition)) return;
+    } else {
+      const prior = new Set(clauses(old.statement)), current = clauses(updated.statement);
+      const added = current.filter(clause => !prior.has(clause));
+      const currentSet = new Set(current);
+      const removed = [...prior].filter(clause => !currentSet.has(clause));
+      // Do not carry forward a wholesale replacement or a change to a technical
+      // constraint. The anchored text and explicit change checks serve different purposes.
+      if (!["functional_requirement", "acceptance_criterion", "integration"].includes(old.type) ||
+        !current.some(clause => prior.has(clause)) || !added.length || added.some(changesSolution) ||
+        fingerprint(architectureTerms(removed.join("\n"))) !== fingerprint(architectureTerms(added.join("\n")))) return;
+      rewrote = true;
+    }
+    return {id: updated.id, version: updated.version};
+  });
+  if (basis.some(item => !item) || new Set(basis.map(item => item?.id)).size !== basis.length ||
+    fingerprint(recommendSolutions(before)) !== fingerprint(recommendSolutions(next))) return;
+  const assessment = assessFeasibility(next);
+  const risk = evaluateRisk(next);
+  if (rewrote && fingerprint(risk.findings) !== fingerprint(evaluateRisk(before).findings)) return;
+  if (!assessment.ready || assessment.fingerprint === detail.feasibility_fingerprint ||
+    solutionBlockingInputs(next).length || risk.unresolved_blocker_count ||
+    invalidRiskOverrides(next).length || refreshedLinks(blueprint, assessment).length > 160) return;
+  return {kind: "SOLUTION_BLUEPRINT_BINDING_REFRESHED", item_id: blueprint.id,
+    previous_binding: detail.feasibility_fingerprint, basis: basis.filter(item => item !== undefined)};
+}
+
+function refreshedLinks(blueprint: Item, assessment: ReturnType<typeof assessFeasibility>) {
+  return [...new Set([...(blueprint.links ?? []), ...assessment.inputs.flatMap(input => input.evidence_ids)])];
+}
 
 function migrate(command: Extract<Command, {kind: "SCHEMA_MIGRATED"}>, id: string): Project {
   const legacy = structuredClone(command.legacy_snapshot);
@@ -127,6 +191,22 @@ function transition(previous: Project | undefined, event: Omit<DomainEvent, "has
       item.confirmed_by = "owner";
       item.confirmed_at = at;
       item.source_refs.push(command.owner_action.source_ref);
+    } else if (command.kind === "SOLUTION_BLUEPRINT_BINDING_REFRESHED") {
+      const blueprint = currentBlueprint(project), detail = blueprint?.blueprint_detail;
+      requireCondition(actor === "agent" && blueprint?.id === command.item_id && blueprint.status === "CONFIRMED" &&
+        detail?.owner_disposition && detail.feasibility_fingerprint === command.previous_binding, "BLUEPRINT_REFRESH_NOT_ALLOWED");
+      requireCondition(command.basis.every(({id, version}) => project.items.some(item => item.id === id &&
+        item.status === "CONFIRMED" && item.version === version)), "BLUEPRINT_REFRESH_BASIS_STALE");
+      const assessment = assessFeasibility(project);
+      const links = refreshedLinks(blueprint, assessment);
+      requireCondition(assessment.ready && links.length <= 160, "BLUEPRINT_REFRESH_NOT_ALLOWED");
+      detail.feasibility_inputs = assessment.inputs.map(({key, evidence_ids}) => ({key, evidence_ids}));
+      detail.feasibility_fingerprint = assessment.fingerprint;
+      blueprint.links = links;
+      blueprint.version++;
+      blueprint.updated_at = at;
+      blueprint.source_refs.push({type: "system_rule", ref: "xmi:confirmed-blueprint-binding:" +
+        fingerprint(command.basis)});
     } else if (command.kind === "ITEM_SUPERSEDED") {
       requireCondition(actor === "owner", "OWNER_ACTION_REQUIRED");
       const item = project.items.find((i) => i.id === command.item_id);
@@ -219,6 +299,7 @@ function transition(previous: Project | undefined, event: Omit<DomainEvent, "has
         source_refs: [...recorded.source_refs, command.owner_action.source_ref]};
     }
     const solutionEvent = command.kind === "SOLUTION_BLUEPRINT_APPROVED" || command.kind === "SOLUTION_BLUEPRINT_DELEGATED" ||
+      command.kind === "SOLUTION_BLUEPRINT_BINDING_REFRESHED" ||
       (command.kind === "CANDIDATE_EXTRACTED" && command.candidate.type === "solution_blueprint");
     project.lifecycle_state = project.current_xspec_version ? "AMENDMENT_REQUIRED" : solutionEvent ? "SOLUTION_REVIEW" : "CLARIFICATION";
   }
@@ -290,6 +371,7 @@ export class ProjectService {
     requireCondition(parsed.success, "INVALID_COMMAND");
     const request = parsed.data;
     requireCondition(request.command.kind !== "PROJECT_CREATED", "USE_CREATE");
+    requireCondition(request.command.kind !== "SOLUTION_BLUEPRINT_BINDING_REFRESHED", "INTERNAL_COMMAND_REQUIRED");
     rejectSecrets(request.command);
     const hash = fingerprint({ ...request, actor });
     return this.store.transaction((tx) => {
@@ -358,6 +440,7 @@ export class ProjectService {
           idempotency_key: "chat-action-review:" + review.review_id + ":" + index, command: versioned};
       });
       const receipts = requests.map(request => tx.receipt(request.project_id + ":" + request.idempotency_key));
+      const refreshKey = review.project_id + ":chat-action-review:" + review.review_id + ":blueprint-binding";
       if (receipts.some(Boolean)) {
         requireCondition(receipts.every(Boolean), "CORRUPT_RECEIPT");
         const events = tx.events(review.project_id), byVersion = new Map(events.map(event => [event.version, event]));
@@ -369,7 +452,14 @@ export class ProjectService {
         }
         // Validate the frozen result once, rather than replaying a long history
         // for every row after a sidecar failure. Later state is checked separately.
-        const result = this.retry(tx, receipts.at(-1)!, fingerprint({...requests.at(-1)!, actor: "owner"}));
+        const last = receipts.at(-1)!;
+        const refresh = tx.receipt(refreshKey);
+        const derived = byVersion.get(last.version + 1);
+        if (refresh) requireCondition(refresh.project_id === review.project_id && refresh.version === last.version + 1 &&
+          derived?.command.kind === "SOLUTION_BLUEPRINT_BINDING_REFRESHED" && derived.actor === "agent", "CORRUPT_RECEIPT");
+        const result = refresh && derived
+          ? this.retry(tx, refresh, fingerprint({command: derived.command, actor: derived.actor}))
+          : this.retry(tx, last, fingerprint({...requests.at(-1)!, actor: "owner"}));
         const current = events.at(-1)!.version === result.model_version ? result : replay(events);
         requireCondition(fingerprint(tx.snapshot(review.project_id)) === fingerprint(current), "CORRUPT_SNAPSHOT");
         beforeCommit(); return result;
@@ -383,6 +473,9 @@ export class ProjectService {
         this.persist(tx, request.project_id, request.expected_version, request.project_id + ":" + request.idempotency_key,
           request.command, "owner", fingerprint({...request, actor: "owner"}), validated);
       }
+      const refresh = review.preserve_blueprint_choices && planBlueprintRefresh(project, validated.project, requests.map(request => request.command));
+      if (refresh) this.persist(tx, review.project_id, validated.project.model_version, refreshKey, refresh, "agent",
+        fingerprint({command: refresh, actor: "agent"}), validated);
       beforeCommit(); return structuredClone(validated.project);
     });
   }
@@ -446,14 +539,19 @@ export class ProjectService {
     });
   }
 
-  resume(projectId: string) {
+  resume(projectId: string, sinceVersion?: number) {
     return this.store.transaction((tx) => {
       const events = tx.events(projectId);
       const project = replay(events);
+      // Resolve both versions under one storage transaction. A pre-migration
+      // version without a replayable event is an unavailable baseline.
+      const baselineIndex = sinceVersion === undefined || sinceVersion >= project.model_version
+        ? -1 : events.findIndex(event => event.version === sinceVersion);
       return { project, snapshot_consistent: fingerprint(tx.snapshot(projectId)) === fingerprint(project),
         recent_event_ids: events.slice(-10).map((e) => e.event_id),
         blockers: project.open_questions.filter((q) => q.status === "BLOCKING"),
-        mode_selection_required: project.delivery_policy === null };
+        mode_selection_required: project.delivery_policy === null,
+        ...(baselineIndex >= 0 ? {baseline: replay(events.slice(0, baselineIndex + 1))} : {}) };
     });
   }
 

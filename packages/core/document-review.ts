@@ -1,29 +1,47 @@
 import {z} from "zod";
 import type {Project} from "../shared-types/domain.ts";
 import type {ReviewBundle} from "./spec-review-service.ts";
-import {canonical} from "./validation.ts";
+import {canonical, fingerprint} from "./validation.ts";
 import {requireCondition} from "./errors.ts";
 import {ARCHITECTURE_LEGACY_MARKER, ARCHITECTURE_PACKAGE_FILE} from "./system-architecture.ts";
 
 const text = (max: number) => z.string().min(1).max(max).refine(s => /\S/u.test(s));
 const evidence = z.strictObject({file_path: text(200), quote: text(1000)});
+const itemQuote = z.strictObject({item_id: text(100), quote: text(1000)});
+const deliveryImpact = z.strictObject({
+  kind: z.enum(["PRODUCT_CHOICE", "VERIFY", "FOLLOW_UP", "REUSE"]),
+  criterion_id: text(100).optional(),
+  impact: text(1000),
+  basis: itemQuote.optional(),
+});
+const deliveryAction = z.enum(["ASK_OWNER", "VERIFY", "FOLLOW_UP", "REUSE"]);
+export const deliveryTriageSchema = z.strictObject({
+  owner_choices: z.number().int().nonnegative(),
+  verification: z.number().int().nonnegative(),
+  follow_up: z.number().int().nonnegative(),
+  reused: z.number().int().nonnegative(),
+});
 export const documentFindingSchema = z.strictObject({id: text(100), severity: z.enum(["BLOCKING", "WARNING", "INFO"]),
-  statement: text(2000), evidence: z.array(evidence).min(1).max(10), suggestion: text(2000), affected_ids: z.array(text(100)).max(100)});
+  statement: text(2000), evidence: z.array(evidence).min(1).max(10), suggestion: text(2000), affected_ids: z.array(text(100)).max(100),
+  delivery_impact: deliveryImpact.optional()});
 export const documentReviewResponseSchema = z.strictObject({schema_version: z.literal("XMI-DOCUMENT-REVIEW-RESPONSE/1"),
   project_id: text(100), model_version: z.number().int().positive(), findings: z.array(documentFindingSchema).max(100),
   questions: z.array(text(1000)).max(20), follow_up_refs: z.array(text(100)).max(100), notes: z.array(text(300)).max(120)});
-const rawFinding = documentFindingSchema.omit({id: true, evidence: true, affected_ids: true}).extend({id: text(100).optional(),
+const rawFinding = documentFindingSchema.omit({id: true, evidence: true, affected_ids: true, delivery_impact: true}).extend({id: text(100).optional(),
   severity: documentFindingSchema.shape.severity.optional(), affected_ids: z.array(text(100)).max(100).optional(),
-  evidence: z.array(z.union([evidence, z.strictObject({item_id: text(100), quote: text(1000)})])).min(1).max(10)}).passthrough();
+  evidence: z.array(z.union([evidence, itemQuote])).min(1).max(10)}).passthrough();
+const promptFinding = rawFinding.extend({delivery_impact: deliveryImpact.optional()});
 export const documentReviewInputSchema = z.object({schema_version: z.literal("XMI-DOCUMENT-REVIEW-RESPONSE/1"),
   project_id: text(100), model_version: z.number().int().positive(), findings: z.array(z.unknown()).max(100),
   questions: z.array(z.unknown()).max(20).optional()}).passthrough();
-export const documentReviewPromptSchema = documentReviewInputSchema.extend({findings: z.array(rawFinding).max(100), questions: z.array(text(1000)).max(20).optional()});
+export const documentReviewPromptSchema = documentReviewInputSchema.extend({findings: z.array(promptFinding).max(100), questions: z.array(text(1000)).max(20).optional()});
 export const documentReviewStatusSchema = z.strictObject({schema_version: z.literal("XMI-DOCUMENT-REVIEW/1"),
   project_id: text(100), model_version: z.number().int().positive(), run_id: z.string().uuid().nullable(),
   state: z.enum(["UNAVAILABLE", "AWAITING_AGENT", "RUNNING", "COMPLETED", "INCOMPLETE", "STALE", "UNVERIFIED"]),
   source_verified: z.boolean(), gate_eligible: z.literal(false), scope: text(1000),
-  findings: z.array(documentFindingSchema).max(20), total_findings: z.number().int().nonnegative(), next_offset: z.number().int().nonnegative().nullable(),
+  findings: z.array(documentFindingSchema.extend({delivery_action: deliveryAction.optional()})).max(20),
+  total_findings: z.number().int().nonnegative(), next_offset: z.number().int().nonnegative().nullable(),
+  delivery_triage: deliveryTriageSchema.optional(),
   questions: documentReviewResponseSchema.shape.questions, follow_up_refs: documentReviewResponseSchema.shape.follow_up_refs,
   notes: documentReviewResponseSchema.shape.notes,
   handled_findings:z.array(z.strictObject({id:text(100),action:z.enum(["IGNORE","DEFER"])})).max(100).optional(),
@@ -31,6 +49,71 @@ export const documentReviewStatusSchema = z.strictObject({schema_version: z.lite
   host_job: z.strictObject({task_name: text(100), fork_turns: z.literal("none"), message: text(12000),
     material_bytes: z.number().int().nonnegative(), packet_sha256: z.string().regex(/^[a-f0-9]{64}$/u)}).nullable(), reason: text(1000)});
 export type DocumentReviewStatus = z.infer<typeof documentReviewStatusSchema>;
+
+type Finding = z.infer<typeof documentFindingSchema>;
+type Item = Project["items"][number];
+
+const confirmed = (p: Project) => p.items.filter(item => item.status === "CONFIRMED");
+const itemBehavior = (item: Item) => fingerprint({type: item.type, statement: item.statement, links: item.links,
+  priority: item.priority, decision_detail: item.decision_detail});
+
+/** Scope comes from confirmed behavior and criteria, never from a reviewer's choice of new scope. */
+export function documentReviewFocus(project: Project, previous?: Project, priorBlockingIds: string[] = []) {
+  // A blueprint's derived links span the whole specification. Compare actual approved statements
+  // and use the blueprint as context, so a binding refresh does not widen the scope.
+  const current = confirmed(project).filter(item => item.type !== "solution_blueprint");
+  const criteria = current.filter(item => item.type === "acceptance_criterion");
+  if (!previous || previous.project_id !== project.project_id || previous.model_version >= project.model_version)
+    return {mode: "INITIAL" as const, acceptance_ids: criteria.map(item => item.id)};
+  const before = new Map(confirmed(previous).filter(item => item.type !== "solution_blueprint").map(item => [item.id, item]));
+  const after = new Map(current.map(item => [item.id, item]));
+  const changed = [...new Set([...before.keys(), ...after.keys()])].filter(id => {
+    const old = before.get(id), now = after.get(id);
+    return !old || !now || itemBehavior(old) !== itemBehavior(now);
+  });
+  const focus = new Set([...changed, ...priorBlockingIds.filter(id => after.has(id))]);
+  const linked = new Set([...focus].flatMap(id => [...(after.get(id)?.links ?? []), ...(before.get(id)?.links ?? [])]));
+  const related = current.filter(item => focus.has(item.id) || linked.has(item.id) || item.links?.some(id => focus.has(id)));
+  const subjects = new Set(related.map(item => item.id));
+  return {mode: "INCREMENT" as const, baseline_model_version: previous.model_version, changed_ids: changed,
+    context_ids: [...subjects], acceptance_ids: criteria.filter(item => subjects.has(item.id) ||
+      item.links?.some(id => subjects.has(id)) || related.some(subject => subject.links?.includes(item.id))).map(item => item.id)};
+}
+
+/** Project approved content is reused only when the proposed wording is an exact existing rule. */
+export function assessDocumentFindings(project: Project, findings: Finding[], focus?: {acceptance_ids: string[]}) {
+  const items = new Map(confirmed(project).map(item => [item.id, item]));
+  const acceptance = focus && new Set(focus.acceptance_ids);
+  const delivery_triage = {owner_choices: 0, verification: 0, follow_up: 0, reused: 0};
+  const routed = findings.map(finding => {
+    const impact = finding.delivery_impact;
+    const criterion = impact?.criterion_id ? items.get(impact.criterion_id) : undefined;
+    const tiedToAcceptance = criterion?.type === "acceptance_criterion" && (!acceptance || acceptance.has(criterion.id)) &&
+      finding.affected_ids.some(id => id === criterion.id || criterion.links?.includes(id) || items.get(id)?.links?.includes(criterion.id));
+    const basis = impact?.basis;
+    const approved = basis && items.get(basis.item_id);
+    const reuse = impact?.kind === "REUSE" && basis && finding.affected_ids.includes(basis.item_id) &&
+      approved?.statement.split(/\r?\n/u).some(line => line.trim() === basis.quote.trim()) &&
+      finding.suggestion.trim() === basis.quote.trim();
+    let delivery_action: z.infer<typeof deliveryAction>;
+    if (impact?.kind === "PRODUCT_CHOICE" && tiedToAcceptance) {
+      delivery_action = "ASK_OWNER";
+      delivery_triage.owner_choices++;
+    } else if (finding.severity === "BLOCKING" || impact?.kind === "VERIFY" && tiedToAcceptance) {
+      // Untyped or unlinked blockers remain visible for XMi to check. An advisory label cannot waive them.
+      delivery_action = "VERIFY";
+      delivery_triage.verification++;
+    } else if (reuse) {
+      delivery_action = "REUSE";
+      delivery_triage.reused++;
+    } else {
+      delivery_action = "FOLLOW_UP";
+      delivery_triage.follow_up++;
+    }
+    return {...finding, delivery_action};
+  });
+  return {routed, delivery_triage};
+}
 
 export function documentReviewMaterial(bundle: ReviewBundle, interviewModule?: string) {
   const p = bundle.model as Project;
@@ -80,8 +163,11 @@ export function collectDocumentReview(bundle: ReviewBundle, interviewModule: str
     seen.add(id);
     const affected = (f.affected_ids ?? []).filter(id => known.has(id));
     if (affected.length !== (f.affected_ids ?? []).length) notes.push(`第${index + 1}条意见包含无法匹配的条目引用，已单独忽略。`);
+    const impact = deliveryImpact.safeParse(f.delivery_impact);
+    if (f.delivery_impact !== undefined && !impact.success) notes.push(`第${index + 1}条意见的交付影响格式不完整，保留原意见供核对。`);
     findings.push({id, severity: f.severity ?? "WARNING" as const, statement: f.statement,
-      evidence: citations as z.infer<typeof evidence>[], suggestion: f.suggestion, affected_ids: affected});
+      evidence: citations as z.infer<typeof evidence>[], suggestion: f.suggestion, affected_ids: affected,
+      ...(impact.success ? {delivery_impact: impact.data} : {})});
   }
   const follow = Array.isArray(r.unresolved_ids) ? [...new Set(r.unresolved_ids.filter((id): id is string => typeof id === "string" && known.has(id)))].slice(0, 100) : [];
   if (Array.isArray(r.unresolved_ids) && r.unresolved_ids.length) notes.push(`另有${r.unresolved_ids.length}个补充核查引用，未当作本轮已读或已确认内容，不影响可核对意见。`);

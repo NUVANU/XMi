@@ -1,7 +1,7 @@
 import test from "node:test";
 import type {TestContext} from "node:test";
 import assert from "node:assert/strict";
-import {mkdtempSync, rmSync, writeFileSync} from "node:fs";
+import {mkdtempSync,  rmSync, writeFileSync} from "node:fs";
 import fs from "node:fs";
 import {syncBuiltinESMExports} from "node:module";
 import {tmpdir} from "node:os";
@@ -22,30 +22,31 @@ import {evaluateRisk} from "../packages/core/completeness-service.ts";
 import {itemFingerprint, modeFingerprint} from "../packages/core/validation.ts";
 import {reviewProjectService} from "./fixtures/spec-review-project.ts";
 import {DomainError} from "../packages/core/errors.ts";
+import type {DomainEvent} from "../packages/shared-types/domain.ts";
 
 const session = "00000000-0000-4000-8000-000000000001", turn = "00000000-0000-4000-8000-000000000002";
 const source = {type: "conversation_turn" as const, ref: "fixture:closing-review"};
-function fixture(t: TestContext, withBlueprint = true) {
+function fixture(t: TestContext, withBlueprint = true, history?: DomainEvent[]) {
   const directory = mkdtempSync(join(tmpdir(), "xmi-closing-review-")), db = join(directory, "product.sqlite"), log = join(directory, "session.jsonl");
   const store = new SqliteProjectStore(db), service = new ProjectService(store), seed = reviewProjectService();
-  const seededEvents = seed.service.history(seed.project.project_id);
+  const seededEvents = history ?? seed.service.history(seed.project.project_id);
   const events = withBlueprint ? seededEvents : seededEvents.filter(event => event.command.kind !== "SOLUTION_BLUEPRINT_APPROVED" &&
     !(event.command.kind === "CANDIDATE_EXTRACTED" && event.command.candidate.type === "solution_blueprint"));
-  const p = withBlueprint ? seed.project : replay(events);
+  const p = withBlueprint && !history ? seed.project : replay(events);
   store.transaction(tx => {for (const event of events) tx.append(event); tx.save(p);}); seed.store.close();
   const router = createSingleReviewRouter(directory, db, undefined, service);
   const prompt = (text: string) => processUserPrompt({hook_event_name: "UserPromptSubmit", session_id: session, turn_id: turn,
     prompt: text, transcript_path: log}, directory, directory);
   const display = (text: string) => writeFileSync(log, JSON.stringify({type: "session_meta", payload: {id: session}}) + "\n" +
     JSON.stringify({type: "response_item", payload: {type: "message", role: "assistant", phase: "final_answer", content: [{type: "output_text", text}]}}) + "\n");
-  const run = (command: unknown) => {const p = service.get(seed.project.project_id); return service.execute({project_id: p.project_id,
-    expected_version: p.model_version, idempotency_key: "seed-" + p.model_version, command});};
+  const run = (command: unknown) => {const current = service.get(p.project_id); return service.execute({project_id: current.project_id,
+    expected_version: current.model_version, idempotency_key: "seed-" + current.model_version, command});};
   const add = (id: string, statement = "A pending scope rule.") => run({kind: "CANDIDATE_EXTRACTED", candidate:
     {id, type: "constraint", statement, status: "PROPOSED", source_refs: [source], tags: ["module:Closing"]}});
-  const args = (id: string) => {const p = service.get(seed.project.project_id), item = p.items.find(i => i.id === id)!;
-    return {schema_version: "0.1.0" as const, project_id: p.project_id, expected_version: p.model_version, idempotency_key: "action-" + id,
+  const args = (id: string) => {const current = service.get(p.project_id), item = current.items.find(i => i.id === id)!;
+    return {schema_version: "0.1.0" as const, project_id: current.project_id, expected_version: current.model_version, idempotency_key: "action-" + id,
       operation: "xmi_item_confirm" as const, item_id: id, item_version: item.version, fingerprint: itemFingerprint(item), intent: "CONFIRM" as const};};
-  const prepare = (requests: unknown[]) => router.prepare(service.get(seed.project.project_id), requests, session);
+  const prepare = (requests: unknown[]) => router.prepare(service.get(p.project_id), requests, session);
   const commit = () => {const r = readSingle(directory, session)!; return router.commit(r.project_id, r.project_version, r.review_id, session);};
   prompt("继续");
   t.after(() => {store.close(); rmSync(directory, {recursive: true, force: true});});
@@ -244,10 +245,11 @@ for (const withBlueprint of [true, false]) {
     assert.ok(outputs.xmi_item_review_prepare.safeParse(prepared.structuredContent).success);
     const {data} = prepared.structuredContent as {data: {review_id: string; review_text: string}};
     assert.match(data.review_text, /同一轮自动校验写入后的版本/u);
-    type Receipt = {model_version: number; post_commit_validation: {ok: true; data: {model_version: number;
+    type Receipt = {model_version: number; post_commit_validation: {ok: true; data: {model_version: number; detail?: "summary";
       validation: {package_valid: boolean}}} | {ok: false; error: {code: string}}};
-    const commit = async () => {
-      const result = await client.callTool({name: "xmi_item_review_commit", arguments: {...binding, review_id: data.review_id}});
+    const commit = async (summary = true) => {
+      const result = await client.callTool({name: "xmi_item_review_commit", arguments: {...binding, review_id: data.review_id,
+        ...(summary ? {validation_detail: "summary"} : {})}});
       assert.ok(outputs.xmi_item_review_commit.safeParse(result.structuredContent).success);
       return result.structuredContent as {ok: true; data: Receipt} | {ok: false};
     };
@@ -263,6 +265,7 @@ for (const withBlueprint of [true, false]) {
     const validation = receipt.post_commit_validation;
     if (withBlueprint) {
       assert.ok(validation.ok);
+      assert.equal(validation.data.detail, "summary");
       assert.equal(validation.data.model_version, receipt.model_version);
       assert.equal(validation.data.validation.package_valid, true);
     } else {
@@ -274,8 +277,9 @@ for (const withBlueprint of [true, false]) {
     assert.equal(after.items.find(item => item.id === "REQ-FINAL")?.status, "CONFIRMED");
     assert.deepEqual(after.items.filter(item => priorItems.some(prior => prior.id === item.id)), priorItems);
     assert.equal(f.service.history(before.project_id).length, beforeEvents + 1);
-    const retried = await commit();
+    const retried = await commit(false);
     assert.equal(retried.ok, true);
+    if (retried.ok && retried.data.post_commit_validation.ok) assert.equal(retried.data.post_commit_validation.data.detail, undefined);
     assert.equal(f.service.history(before.project_id).length, beforeEvents + 1);
 
     f.add("REQ-AFTER-FINAL");

@@ -98,6 +98,44 @@ test("a known existing confirmed ordinary statement can be corrected directly fr
   assert.deepEqual(item.links,prior.links);assert.deepEqual(item.source_refs.slice(0,-1),prior.source_refs);
 });
 
+test("replacement reviews show the exact whole adopted text once and preserve native approval and history",t=>{
+  const f=fixture(t),before=f.service.get(f.id),prior=before.items.find(i=>i.id==="AC-REVIEW")!;
+  const replacement="透明人物贴齐画面底部。保留28角色表情、2主角、4头像、23背景、23缩略图。手机消息可输入、发送及返回。";
+  const prepared=f.prepare([prior.id],replacement),record=readSingle(f.root,f.session)!;
+  assert.equal(prepared.review_text.split(replacement).length-1,1);
+  assert.ok(!prepared.review_text.includes(prior.statement));
+  assert.match(prepared.review_text,/采纳后完整文本：/u);
+  assert.match(prepared.review_text,/原确认与来源保留在历史记录中/u);
+  assert.ok(prepared.review_text.includes(prior.id));
+  assert.equal(record.commands?.[0]?.kind,"ITEM_TEXT_REVISED");
+  assert.throws(f.commit,/NATIVE_OWNER_REPLY_REQUIRED/);
+  f.display(prepared.review_text);f.prompt("确认");f.commit();
+  const after=f.service.get(f.id),item=after.items.find(i=>i.id===prior.id)!;
+  assert.equal(item.statement,replacement);assert.equal(item.status,"CONFIRMED");
+  assert.equal(item.version,prior.version+1);assert.deepEqual(item.links,prior.links);
+  assert.deepEqual(item.source_refs.slice(0,-1),prior.source_refs);
+  assert.deepEqual(after.items.filter(i=>i.id!==prior.id),before.items.filter(i=>i.id!==prior.id));
+});
+
+test("shorter replacement display still rejects a duplicated character or truncated adopted text",t=>{
+  for(const mutate of [(s:string)=>s.replace("23缩略图","23缩略略图"),(s:string)=>s.replace("可输入、发送及返回。","可输入。")]){
+    const f=fixture(t),before=fingerprint(f.service.get(f.id));
+    const prepared=f.prepare(["AC-REVIEW"],"透明人物贴底，保留23缩略图。手机消息可输入、发送及返回。");
+    f.display(mutate(prepared.review_text));
+    assert.match(f.prompt("确认"),/REVIEW_DIGEST_MISMATCH/u);
+    assert.equal(readSingle(f.root,f.session)!.status,"INVALIDATED");
+    assert.throws(f.commit,/NATIVE_OWNER_REPLY_REQUIRED/);
+    assert.equal(fingerprint(f.service.get(f.id)),before);
+  }
+});
+
+test("handling without a replacement retains the complete original text for a direct Owner edit",t=>{
+  const f=fixture(t),prior=f.service.get(f.id).items.find(i=>i.id==="AC-REVIEW")!;
+  const prepared=f.prepare([prior.id]);assert.ok(prepared.review_text.includes(prior.statement));
+  f.display(prepared.review_text);f.prompt("第1项改为：保留直接处理回复中的完整最终文本。");f.commit();
+  assert.equal(f.service.get(f.id).items.find(i=>i.id===prior.id)!.statement,"保留直接处理回复中的完整最终文本。");
+});
+
 test("all ignored/deferred choices are recorded once with no product event and survive a new router",t=>{
   const f=fixture(t);f.add("AC-IGNORE");f.add("AC-DEFER");const before=fingerprint(f.service.get(f.id)),events=f.service.history(f.id).length;
   f.display(f.prepare(["AC-IGNORE","AC-DEFER"]).review_text);f.prompt("1忽略；2暂缓");

@@ -4,7 +4,7 @@
 
 Guided product clarification and traceable XSpec specifications for AI-assisted development.
 
-**English** · [简体中文](README.zh-CN.md)
+**English** · [简体中文](https://github.com/NUVANU/XMi/blob/main/README.zh-CN.md)
 
 [Quick start](#quick-start) · [Architecture](docs/public/ARCHITECTURE.md) · [Known issues](docs/public/KNOWN-ISSUES.md) · [X Suite](https://github.com/NUVANU/X-Suite)
 
@@ -12,7 +12,18 @@ You should not have to know the code before you can explain the product you want
 
 **XMi helps you make those decisions before they become code.** Discuss your idea module by module, see what is confirmed and what is still open, and export a versioned specification that another developer or agent can inspect.
 
-## What’s new in V0.1.2
+## Latest source update — 2026-11-22
+
+The package version remains **0.1.2**. Use the [current source ZIP](https://github.com/NUVANU/XMi/archive/refs/heads/main.zip) for this update and record its commit. The [v0.1.2 Release](https://github.com/NUVANU/XMi/releases/tag/v0.1.2) and its lightweight/source attachments are the earlier fixed build; they do not contain this update.
+
+- **Less repeated confirmation.** Show complete replacement text once. A bounded Codex Stop preflight checks checklist delivery before asking for consent; the genuine user reply, version binding and commit remain required.
+- **Continue from the change.** Version-bound incremental project reads, exact item reads and short validation receipts reduce repeated context. Counts, pagination and full readback remain available; summaries do not replace review evidence or approval.
+- **Reuse approved technical choices where valid.** Eligible requirement, acceptance and integration amendments can carry forward the confirmed blueprint in one commit. Real solution changes keep the existing review path.
+- **A separate prototype integration.** An opt-in local host adapter presents the first-version behavior, flow and observable checks, groups open choices, and can publish a verified 16-file prototype XSpec after the actual displayed user choice. The ordinary MCP catalog remains unchanged by default; this is not a hosted product or production-readiness claim.
+
+See [update details, upgrade compatibility and validation scope](docs/public/UPDATE-20261122.md). Existing databases need a backup before upgrade: the additive blueprint-binding event requires an updated reader; an older reader may need its pre-upgrade backup.
+
+## V0.1.2 release baseline
 
 - **Confirm the changes that need a decision.** Reuse unchanged confirmed facts and dispositions. A clear issue-handling reply confirms its chosen actions; reports and review startup do not add another confirmation round.
 - **Generate the architecture alongside the specification.** After solution confirmation, XMi generates the version-bound **24-chapter system architecture** before full independent content review. It is available at `.xmi/context/architecture.md` and in `TECHNICAL-SOLUTION-BLUEPRINT.md` within the existing 16-file XSpec package.

@@ -54,7 +54,7 @@ test("public source preserves audited parser bytes while excluding personal stat
     'apps/dreamkids-prototype/design-card.css','apps/dreamkids-prototype/prototype-export.ts',
     'apps/dreamkids-prototype/flow-order.ts','apps/dreamkids-prototype/design-options.ts',
     'docs/NATIVE-REVIEW-DELIVERY-20261115.md','docs/DREAMKIDS-PROTOTYPE-DOCUMENT-20261122.md',
-    'README.md','README.zh-CN.md'])assert.deepEqual(files.get(path),readFileSync(path),path);
+    'README.md','README.zh-CN.md','开始使用.txt','.gitignore'])assert.deepEqual(files.get(path),readFileSync(path),path);
   assert.match(files.get('.gitattributes')!.toString(),/^packages\/mammoth-api\/\*\* -text$/m);
   for(const [path,bytes] of files) {
     assert.doesNotMatch(path,/^(?:apps\/cloud-site|exports|\.git|\.codex|\.xmem|node_modules)\/|\.(?:sqlite|jsonl)$/);

@@ -12,9 +12,9 @@ You should not have to know the code before you can explain the product you want
 
 **XMi helps you make those decisions before they become code.** Discuss your idea module by module, see what is confirmed and what is still open, and export a versioned specification that another developer or agent can inspect.
 
-## Latest source update — 2026-11-22
+## What’s new in V0.1.3
 
-The package version remains **0.1.2**. Use the [current source ZIP](https://github.com/NUVANU/XMi/archive/refs/heads/main.zip) for this update and record its commit. The [v0.1.2 Release](https://github.com/NUVANU/XMi/releases/tag/v0.1.2) and its lightweight/source attachments are the earlier fixed build; they do not contain this update.
+**V0.1.3** packages the 2026-11-22 source update as fixed downloads: [Release](https://github.com/NUVANU/XMi/releases/tag/v0.1.3) · [Lightweight ZIP](https://github.com/NUVANU/XMi/releases/download/v0.1.3/xmi-0.1.3-lite.zip) · [Source ZIP](https://github.com/NUVANU/XMi/releases/download/v0.1.3/xmi-0.1.3-source.zip) · [SHA-256 checksums](https://github.com/NUVANU/XMi/releases/download/v0.1.3/SHA256SUMS.txt). The earlier v0.1.2 release stays available unchanged. See [release notes](docs/public/RELEASE-0.1.3.md).
 
 - **Less repeated confirmation.** Show complete replacement text once. A bounded Codex Stop preflight checks checklist delivery before asking for consent; the genuine user reply, version binding and commit remain required.
 - **Continue from the change.** Version-bound incremental project reads, exact item reads and short validation receipts reduce repeated context. Counts, pagination and full readback remain available; summaries do not replace review evidence or approval.
@@ -87,7 +87,7 @@ The current XDev handoff contract uses a 16-file package with manifest/content h
 
 ## Quick start
 
-Current public source: **V0.1.2 · package `0.1.2` · Apache-2.0**.
+Current public source: **V0.1.3 · package `0.1.3` · Apache-2.0**.
 
 Use **Node.js 24.20.0** and **npm 11.19.0**. Clone this repository or download its source, then run the following from its root:
 

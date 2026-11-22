@@ -12,9 +12,9 @@
 
 **XMi 帮你在这些猜测变成代码之前，把产品讲清楚。**按模块讨论想法，看到哪些已经确认、哪些仍然待定，再导出开发者或其他 Agent 能够核对的版本化规格。
 
-## 最新源码更新：2026-11-22
+## V0.1.3 更新了什么？
 
-包版本仍为 **0.1.2**。本次更新请使用[当前源码 ZIP](https://github.com/NUVANU/XMi/archive/refs/heads/main.zip)，并记录 commit。[v0.1.2 Release](https://github.com/NUVANU/XMi/releases/tag/v0.1.2) 及其轻量包、源码附件是此前固定构建，不包含本次更新。
+**V0.1.3** 将 2026-11-22 源码更新整理为固定发行包：[发布页](https://github.com/NUVANU/XMi/releases/tag/v0.1.3) · [轻量安装包](https://github.com/NUVANU/XMi/releases/download/v0.1.3/xmi-0.1.3-lite.zip) · [源码包](https://github.com/NUVANU/XMi/releases/download/v0.1.3/xmi-0.1.3-source.zip) · [SHA-256 校验和](https://github.com/NUVANU/XMi/releases/download/v0.1.3/SHA256SUMS.txt)。旧 v0.1.2 保持原样，详见[发行说明](docs/public/RELEASE-0.1.3.md)。
 
 - **减少重复确认。** 替换条目的完整新文本只展示一次；Codex Stop 预检先检查清单是否完整交付，纠正次数有界。真实用户回复、版本绑定与提交仍须核验。
 - **接着变化继续。** 增量读取按项目版本列出变化，按条目回读完整内容，并提供短校验回执。数量、分页和完整回读入口保留；摘要不替代评审证据或批准。
@@ -87,7 +87,7 @@ XMi 编译并校验 **XSpec**，输出带规格、配套文档和完整性信息
 
 ## 快速开始
 
-当前公开源码：**V0.1.2 · 包版本 `0.1.2` · Apache-2.0**。
+当前公开源码：**V0.1.3 · 包版本 `0.1.3` · Apache-2.0**。
 
 准备 **Node.js 24.20.0** 与 **npm 11.19.0**，克隆仓库或下载源码后，在仓库根目录执行：
 

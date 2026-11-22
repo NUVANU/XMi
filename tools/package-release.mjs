@@ -19,7 +19,8 @@ export function publicFiles(root) {
     ...readdirSync(join(root,'docs')).filter(p=>/^\d\d-.*\.md$/.test(p)).map(p=>'docs/'+p),
     ...['M0-CAPABILITY-REPORT.md','M0-IMPLEMENTATION-DECISION.md','M0-MILESTONE-REPORT.md','M10-MILESTONE-REPORT.md','M11-OWNER-ACCEPTANCE.md'].map(p=>'docs/'+p),
     'docs/evidence/M3-FORWARD-TESTS.json',
-    'docs/NATIVE-REVIEW-DELIVERY-20261115.md','docs/DREAMKIDS-PROTOTYPE-DOCUMENT-20261122.md'];
+    'docs/NATIVE-REVIEW-DELIVERY-20261115.md','docs/DREAMKIDS-PROTOTYPE-DOCUMENT-20261122.md',
+    ...(existsSync(join(root,'开始使用.txt'))?['开始使用.txt']:[])];
   const redact=text=>text.replace(/\b[A-Za-z]:[/\\][^\s"'`<>]+/g,'/local/redacted-path')
     .replace(/01a[0-9a-f]{5}-[0-9a-f-]{27}/gi,'redacted-session-id')
     .replace(/XMI-[0-9A-F]{8}-(?:[0-9A-F]{4}-){3}[0-9A-F]{12}/g,'XMI-REDACTED')
@@ -41,7 +42,9 @@ export function publicFiles(root) {
   files.set('README.md',load('README.md'));
   if(existsSync(join(root,'README.zh-CN.md')))files.set('README.zh-CN.md',load('README.zh-CN.md'));
   files.set('AGENTS.md',Buffer.from(load('AGENTS.md').toString().split('## XMem project continuity')[0].trimEnd()+'\n'));
-  files.set('.gitignore',Buffer.from(load('.gitignore').toString().trimEnd()+'\n\n# Never publish personal host state or product data\n.codex/\n.xmi-install/\n.env\n.env.*\n*.sqlite\n*.sqlite-wal\n*.sqlite-shm\n*.jsonl\n'));
+  const ignore=load('.gitignore').toString().trimEnd()+'\n';
+  files.set('.gitignore',Buffer.from(ignore.includes('# Never publish personal host state or product data')?ignore:
+    ignore+'\n# Never publish personal host state or product data\n.codex/\n.xmi-install/\n.env\n.env.*\n*.sqlite\n*.sqlite-wal\n*.sqlite-shm\n*.jsonl\n'));
   files.set('.gitattributes',Buffer.from('* text=auto eol=lf\n*.zip binary\n*.png binary\n# Upstream provenance hashes require original bytes on every checkout.\npackages/mammoth-api/** -text\n'));
   for(const [path,bytes] of files) {
     if(path.split('/').includes('..')||isAbsolute(path)||/^(\.git|\.codex|exports|node_modules)\//.test(path)||/\.(sqlite|jsonl)$/.test(path))throw new Error('Private package path: '+path);

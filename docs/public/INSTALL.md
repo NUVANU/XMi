@@ -45,7 +45,7 @@ npm run configure -- --host workbuddy --data-dir "D:/XMi-workbuddy-data"
 
 ## 2026-11-22 source update / 本次源码升级
 
-Use the current repository source for this update; the fixed v0.1.2 Release attachments predate it. The package version remains 0.1.2, so record the commit as well. Read [the update note](UPDATE-20261122.md).
+Use the fixed [v0.1.3 source or lightweight release](https://github.com/NUVANU/XMi/releases/tag/v0.1.3) for this update; v0.1.2 attachments predate it. The lightweight ZIP omits development tests and tooling; it still needs Node.js and production dependencies. Record version 0.1.3 and the release commit, and verify SHA256SUMS.txt. Read [the release notes](RELEASE-0.1.3.md) and [update note](UPDATE-20261122.md).
 
 Back up the existing database and preserve its project ID and routing before switching the source entry. The additive blueprint-binding event needs a current reader; do not point an older reader at updated data. Keep the pre-upgrade backup for rollback. Do not overwrite a running database or use the first-use helper to take over an existing one.
 

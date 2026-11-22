@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.3 (2026-11-22)
+
+- Publishes the current checklist-preflight, incremental-context, blueprint-reuse and optional local prototype update as a fixed source and lightweight release.
+- Aligns package, lockfile, plugin and MCP server versions to 0.1.3. No schema, dependency or new runtime behavior change from the reviewed source update.
+- Includes bilingual README and release notes, new prototype runtime files, archive integrity manifests and SHA-256 checksums.
+- Preserves previous releases and documents reader compatibility, hook trust and validation limits in docs/public/RELEASE-0.1.3.md.
+
 ## Source update (2026-11-22; package version 0.1.2)
 
 - Bounded native checklist delivery preflight and complete replacement rendering.

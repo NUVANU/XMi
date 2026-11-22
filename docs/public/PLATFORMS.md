@@ -15,3 +15,7 @@
 验收记录见 [ACCEPTANCE-SUMMARY.json](releases/0.1.2/ACCEPTANCE-SUMMARY.json)，行为和来源见 [V0.1.2 更新说明](RELEASE-0.1.2.md)、[工作流](WORKFLOW.md)。验收摘要是同步前的本地记录；其中 remote_published=false 描述该记录产生时的状态，GitHub 同步以实际仓库提交为准。
 
 依赖安装及模型服务可能需要网络。产品状态保存在用户选择的本地目录；宿主/模型隐私政策另行适用。FAST_VALIDATION 只面向原型规格，所有模式均保留来源与明确确认。
+
+## 2026-11-22 additional scope
+
+The current source adds a bounded Codex Stop preflight and incremental read/receipt projections. A local prototype adapter is explicitly opt-in; default MCP discovery is unchanged. Scoped existing-machine synthetic prototype export and read-only XDev reader checks are recorded separately from full downstream Job/QA acceptance. Fresh-host, other-platform and hosted-service acceptance are not established by these records. See [the update note](UPDATE-20261122.md).

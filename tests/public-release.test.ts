@@ -21,6 +21,10 @@ test("public configuration generates independent Codex and generic-host routes w
   assert.equal(config.mcpServers.xmi.command,process.execPath);
   assert.equal(config.mcpServers.xmi.args[0],join(f.root,"apps/mcp-server/main.ts"));
   assert.equal(JSON.parse(readFileSync(join(record.plugin_directory,"hooks/runtime.json"),"utf8")).source_root,f.root);
+  const hooks=JSON.parse(readFileSync(join(record.plugin_directory,"hooks/hooks.json"),"utf8")).hooks;
+  assert.ok(hooks.UserPromptSubmit[0].hooks[0].command.includes("on-user-prompt.mjs"));
+  assert.ok(hooks.Stop[0].hooks[0].command.includes("on-stop.mjs"));
+  assert.ok(existsSync(join(record.plugin_directory,"hooks/on-stop.mjs")));
   assert.deepEqual(JSON.parse(readFileSync(join(record.plugin_directory,".mcp.json"),"utf8")).mcpServers.xmi.env_vars,["CODEX_HOME"]);
   assert.equal(existsSync(record.database),false);
   const other=f.run("workbuddy",join(f.base,"other-data"));assert.equal(other.status,0,other.stderr);
@@ -46,6 +50,11 @@ test("native module guidance requires durable grant and commit, never direct hoo
 
 test("public source preserves audited parser bytes while excluding personal state and diagnostic identities",()=>{
   const files=publicFiles(resolve('.'));
+  for(const path of ['apps/dreamkids-prototype/document-session.ts','apps/dreamkids-prototype/design-card.ts',
+    'apps/dreamkids-prototype/design-card.css','apps/dreamkids-prototype/prototype-export.ts',
+    'apps/dreamkids-prototype/flow-order.ts','apps/dreamkids-prototype/design-options.ts',
+    'docs/NATIVE-REVIEW-DELIVERY-20261115.md','docs/DREAMKIDS-PROTOTYPE-DOCUMENT-20261122.md',
+    'README.md','README.zh-CN.md'])assert.deepEqual(files.get(path),readFileSync(path),path);
   assert.match(files.get('.gitattributes')!.toString(),/^packages\/mammoth-api\/\*\* -text$/m);
   for(const [path,bytes] of files) {
     assert.doesNotMatch(path,/^(?:apps\/cloud-site|exports|\.git|\.codex|\.xmem|node_modules)\/|\.(?:sqlite|jsonl)$/);

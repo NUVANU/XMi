@@ -13,7 +13,7 @@ import {inputs, outputs, metadata} from "../apps/mcp-server/contracts.ts";
 import {materialReadCommand} from "../apps/mcp-server/native-spec-review.ts";
 import {buildReviewTransport, reviewPagePath} from "../apps/mcp-server/review-transport.ts";
 import {buildReviewBundle} from "../packages/core/spec-review-service.ts";
-import {collectDocumentReview, documentReviewMaterial, documentReviewStatusSchema} from "../packages/core/document-review.ts";
+import {assessDocumentFindings, collectDocumentReview, documentReviewFocus, documentReviewMaterial, documentReviewStatusSchema} from "../packages/core/document-review.ts";
 import {canonical} from "../packages/core/validation.ts";
 import {SqliteSpecReviewStore} from "../packages/storage/spec-review-store.ts";
 import {reviewProject, reviewProjectService} from "./fixtures/spec-review-project.ts";
@@ -60,6 +60,44 @@ test("readable document and module inputs omit full model/json and distinguish u
   assert.equal(result.findings.length, 1); assert.ok(result.notes.some(n => n.includes("补充材料")));
 });
 
+test("incremental scope uses confirmed changes, related acceptance, and open blocking subjects", () => {
+  const previous = reviewProject(), current = structuredClone(previous);
+  current.model_version++;
+  const item = current.items.find(i => i.id === "REQ-REVIEW")!;
+  item.statement += " Show the saved time on reload.";
+  current.items.find(i => i.id === "COST-REVIEW")!.updated_at = "2026-11-22T00:00:00.000Z";
+  current.items.push({...item, id: "DRAFT-REVIEW", status: "PROPOSED", statement: "Change the public experience."});
+  const focus = documentReviewFocus(current, previous, ["DATA-REVIEW"]);
+  assert.equal(focus.mode, "INCREMENT");
+  assert.deepEqual(focus.changed_ids, ["REQ-REVIEW"]);
+  assert.deepEqual(focus.acceptance_ids, ["AC-REVIEW"]);
+  assert.deepEqual(new Set(focus.context_ids), new Set(["FLOW-REVIEW", "REQ-REVIEW", "AC-REVIEW", "DATA-REVIEW"]));
+  assert.equal(documentReviewFocus(current, {...previous, project_id: "XMI-OTHER-PROJECT"}).mode, "INITIAL");
+});
+
+test("only grounded current acceptance choices enter Owner review; verification and advice remain visible", () => {
+  const project = reviewProject(), bundle = buildReviewBundle(project);
+  const raw = response(project), req = raw.findings[0]!;
+  const affected_ids = ["REQ-REVIEW"], basis = {item_id: "REQ-REVIEW", quote: "Save a note and reload it."};
+  const finding = {...req, affected_ids, severity: "WARNING"};
+  const responseValue = collectDocumentReview(bundle, undefined, {...raw, findings: [
+    {...finding, id: "YES", delivery_impact: {kind: "PRODUCT_CHOICE", criterion_id: "AC-REVIEW", impact: "Users choose whether a failed save is retried automatically."}},
+    {...finding, id: "TEST", delivery_impact: {kind: "VERIFY", criterion_id: "AC-REVIEW", impact: "Reload after forcing a failed save."}},
+    {...finding, id: "LATER", delivery_impact: {kind: "FOLLOW_UP", impact: "A storage usage chart can wait."}},
+    {...finding, id: "NO-LINK", affected_ids: ["DATA-REVIEW"], delivery_impact: {kind: "PRODUCT_CHOICE", criterion_id: "AC-REVIEW", impact: "Unlinked question."}},
+    {...finding, id: "REUSE", suggestion: basis.quote, delivery_impact: {kind: "REUSE", impact: "Use the approved reload rule.", basis}},
+    {...finding, id: "NEW-WORDING", delivery_impact: {kind: "REUSE", impact: "Proposed replacement is new.", basis}},
+    {...req, id: "REAL-BLOCKER", delivery_impact: {kind: "FOLLOW_UP", impact: "A label cannot remove blocking impact."}},
+    {...req, id: "BAD-IMPACT", delivery_impact: {kind: "NOT_A_ROUTE"}},
+  ]});
+  const {routed, delivery_triage} = assessDocumentFindings(project, responseValue.findings, {acceptance_ids: ["AC-REVIEW"]});
+  assert.deepEqual(routed.map(f => f.delivery_action),
+    ["ASK_OWNER", "VERIFY", "FOLLOW_UP", "FOLLOW_UP", "REUSE", "FOLLOW_UP", "VERIFY", "VERIFY"]);
+  assert.deepEqual(delivery_triage, {owner_choices: 1, verification: 3, follow_up: 3, reused: 1});
+  assert.match(responseValue.notes[0]!, /交付影响格式不完整/);
+  assert.equal(assessDocumentFindings(project, [responseValue.findings[0]!], {acceptance_ids: []}).routed[0]!.delivery_action, "FOLLOW_UP");
+});
+
 function fixture(t: TestContext) {
   const data = reviewProjectService(), root = mkdtempSync(join(tmpdir(), "xmi-document-review-"));
   const sessions = join(root, "sessions"), date = join(sessions, "2026", "10", "17"), native = join(root, "native"), directory = join(root, "review");
@@ -70,12 +108,13 @@ function fixture(t: TestContext) {
   const runner = new DocumentReviewRunner({directory, sessions, native});
   t.after(() => {runner.close(); data.store.close(); rmSync(root, {recursive: true, force: true});});
   const start = () => documentReviewStatusSchema.parse(runner.start(data.project, "one", session, () => data.service.get(data.project.project_id)));
-  function deliver(options: {badQuote?: boolean; partial?: boolean; clean?: boolean} = {}) {
+  function deliver(options: {badQuote?: boolean; partial?: boolean; clean?: boolean; advisoryOnly?: boolean} = {}) {
     const prepared = start(), job = prepared.host_job!; assert.ok(job);
     const db = new SqliteSpecReviewStore(join(directory, "reviews.sqlite"));
     const saved = db.get(data.project.project_id, prepared.run_id!)!; db.close();
     const host = saved.run.host!, packet = readFileSync(host.material_path, "utf8"), value = response(data.project);
     if (options.clean) {value.findings = []; value.questions = [];}
+    if (options.advisoryOnly) value.findings = value.findings.slice(1);
     if (options.badQuote) value.findings[0]!.evidence[0]!.quote = "not supplied";
     const path = "/root/" + job.task_name, text = JSON.stringify(value), pages = buildReviewTransport(packet).pages;
     writeFileSync(childLog, [
@@ -159,7 +198,7 @@ test("delivery lookup survives runner restart, checks native source and version,
   const summary = f.runner.summary(f.project);
   assert.equal(summary.state, "COMPLETED"); assert.equal(summary.source_verified, true);
   assert.equal(summary.run_id, prepared.run_id); assert.equal(summary.finding_count, 2);
-  assert.equal(documentDelivery(summary, true).stage, "REVIEW_FINDINGS");
+  assert.equal(documentDelivery(summary, true).stage, "VERIFY_INCREMENT");
   const db = new SqliteSpecReviewStore(join(f.directory, "reviews.sqlite"));
   const saved = db.get(f.project.project_id, prepared.run_id!)!;
   db.prepare(saved.bundle, "module-only", {...host, interview_module: "Notes"}); db.close();
@@ -207,6 +246,23 @@ test("clean review enables the light delivery step, not formal readiness or prod
   }
 });
 
+test("remaining advisory notes need no confirmation and do not prevent requesting exact export", t => {
+  const f = fixture(t);
+  const before = canonical(f.project);
+  f.deliver({advisoryOnly: true});
+  const completed = f.start();
+  assert.equal(completed.findings[0]!.delivery_action, "FOLLOW_UP");
+  assert.equal(completed.questions.length, 1);
+  assert.deepEqual(completed.delivery_triage, {owner_choices: 0, verification: 0, follow_up: 1, reused: 0});
+  const summary = f.runner.summary(f.project);
+  assert.equal(documentDelivery(summary, true).stage, "READY_TO_EXPORT");
+  assert.equal(documentDelivery(summary, false).stage, "CHECK_SPEC");
+  const exported = new XSpecService().finalizeForExport(f.project, {}, summary);
+  assert.equal(exported.validation.package_valid, true);
+  assert.equal(exported.validation.readiness_evaluation.hard_gate_ready, false);
+  assert.equal(canonical(f.service.get(f.project.project_id)), before);
+});
+
 test("handled independent findings and questions retain dispositions without changing the original review or product",t=>{
   const f=fixture(t),before=canonical(f.project);f.deliver();const status=f.start();
   assert.equal(status.findings.length,2);assert.equal(status.questions.length,1);
@@ -243,6 +299,15 @@ test("MCP audit, readiness, compilation and validation report the collected revi
     assert.equal(envelope.data.delivery_workflow.document_review.source_verified, true);
     assert.equal(envelope.data.delivery_workflow.formal_assurance, "NOT_ESTABLISHED");
   }
+  const compact = await client.callTool({name: "xmi_xspec_validate", arguments: {schema_version: "0.1.0",
+    project_id: f.project.project_id, expected_version: f.project.model_version, detail: "summary"}});
+  const envelope = JSON.parse(JSON.stringify(outputs.xmi_xspec_validate.parse(compact.structuredContent)));
+  assert.equal(envelope.ok, true);
+  assert.equal(envelope.data.delivery_workflow.review_state, "COMPLETED");
+  assert.equal(envelope.data.delivery_workflow.review_source_verified, true);
+  assert.equal(envelope.data.delivery_workflow.reviewed_model_version, f.project.model_version);
+  assert.equal(envelope.data.delivery_workflow.finding_count, f.runner.summary(f.project).finding_count);
+  assert.equal(envelope.data.validation.readiness_evaluation.hard_gate_ready, false);
   assert.equal(canonical(f.service.get(f.project.project_id)), before);
 });
 

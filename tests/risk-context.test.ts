@@ -6,6 +6,7 @@ import {MemoryProjectStore} from "../packages/storage/memory.ts";
 import {evaluateRisk, evaluateRiskLegacy, exclusionScopeIssues, invalidRiskOverrides, CompletenessService, riskResolutionRevision} from "../packages/core/completeness-service.ts";
 import {itemFingerprint, modeFingerprint, fingerprint} from "../packages/core/validation.ts";
 import type {Item, Project} from "../packages/shared-types/domain.ts";
+import {clarifyLocalPatchAcceptance} from "../packages/core/risk-context.ts";
 
 const owner = {type: "owner_action" as const, ref: "fixture:risk-context"};
 function fixture(statement = "Record evaluations") {
@@ -19,6 +20,16 @@ function fixture(statement = "Record evaluations") {
   return {service, get: () => p, run};
 }
 function reasons(p: Project) {return evaluateRisk(p).findings.map(f => f.reason_code);}
+
+test("a local patch approval acceptance proposal is made unambiguous before review", () => {
+  const proposal = "通过隔离验收后，在无 Key 样例中核对合规补丁仅产生一次绑定原 call_id 的代审回执，补丁超出项目允许范围或授权无法核对时，保留手动审批且文件保持原状。";
+  const clarified = clarifyLocalPatchAcceptance(proposal);
+  assert.equal(clarified, proposal.replace("合规补丁", "满足当前项目代审条件的补丁"));
+  assert.ok(!reasons(fixture(clarified).get()).includes("REGULATED_OR_HIGH_CONSEQUENCE"));
+  const actual = clarified + " 监管合规要求由审核方核验。";
+  assert.ok(reasons(fixture(clarifyLocalPatchAcceptance(actual)).get()).includes("REGULATED_OR_HIGH_CONSEQUENCE"));
+  assert.equal(clarifyLocalPatchAcceptance("核对合规补丁。"), "核对合规补丁。");
+});
 
 test("operational terms and provenance tags do not create medical/destructive risks; actual behavior still does", () => {
   for (const statement of ["系统健康页和 readiness", "破坏性变化分类，变单位需新契约", "service health check; breaking changes classification"]) {

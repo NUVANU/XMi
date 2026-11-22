@@ -5,7 +5,7 @@ import {z} from "zod";
 import {commandSchema} from "../../packages/shared-types/domain.ts";
 import {sourceSchema} from "../../packages/shared-types/domain.ts";
 import type {ProjectService} from "../../packages/core/project-service.ts";
-import {previewOwnerAction} from "../../packages/core/project-service.ts";
+import {planBlueprintRefresh, previewOwnerAction} from "../../packages/core/project-service.ts";
 import {ownerReviewCommandSchema} from "../../packages/core/action-confirmation.ts";
 import {assessFeasibility} from "../../packages/core/solution-feasibility.ts";
 import type {Project, Command} from "../../packages/shared-types/domain.ts";
@@ -18,6 +18,7 @@ import {readPending, writeRecord, sessionPattern, withReviewLock, nativeInterrup
 import {issueHandlingSchema,handlingRecordSchema,issueHandlingSummary} from "../../packages/core/issue-handling.ts";
 import type {IssueHandling,IssueChoice} from "../../packages/core/issue-handling.ts";
 import {saveIssueDispositions} from "./issue-dispositions.ts";
+import {clarifyLocalPatchAcceptance} from "../../packages/core/risk-context.ts";
 
 export const singlePendingSchema = z.strictObject({session_id: z.string().regex(sessionPattern), db_path: z.string(),
   project_id: z.string(), project_version: z.number().int().positive(), review_id: z.string().uuid(),
@@ -31,7 +32,7 @@ export const singlePendingSchema = z.strictObject({session_id: z.string().regex(
   grant_source_ref: sourceSchema.optional(),
   native_epoch: z.string().optional(), policy_review: z.boolean().optional(), applied_policy_hash: z.string().optional(),
   applied_version: z.number().int().positive().optional(), validate_after_commit: z.literal(true).optional(),
-  issue_handling:handlingRecordSchema.optional()});
+  issue_handling:handlingRecordSchema.optional(), preserve_blueprint_choices: z.literal(true).optional()});
 export const reviewRecordSchema = singlePendingSchema.extend({commands: z.array(ownerReviewCommandSchema).max(50).nullable().optional(),
   applied_project_hash: z.string().regex(/^[a-f0-9]{64}$/u).optional()});
 export function reviewCommandsHash(record: z.infer<typeof reviewRecordSchema>) {return fingerprint(record.action === "BATCH" ? record.commands : record.command);}
@@ -72,7 +73,7 @@ export function readSingle(directory: string, session: string) {
   requireCondition(record.action === "BATCH" ? record.command === null && record.actor === "owner" &&
     (!["PENDING", "GRANTED"].includes(record.status) || !!record.commands?.length ||
       record.status==="GRANTED" && !!record.issue_handling?.choices?.length && Array.isArray(record.commands)) :
-    !record.commands && !record.validate_after_commit &&
+    !record.commands && !record.validate_after_commit && !record.preserve_blueprint_choices &&
       (!["PENDING", "GRANTED"].includes(record.status) || record.command !== null), "INVALID_REVIEW_RECORD");
   if (["PENDING", "GRANTED"].includes(record.status) && record.command) {
     requireCondition(record.actor === (record.command.kind === "CANDIDATE_EXTRACTED" ? "agent" : "owner"), "INVALID_REVIEW_RECORD");
@@ -165,7 +166,7 @@ export function createSingleReviewRouter(directory: string, dbPath: string, laun
     try {const marker = JSON.parse(readFileSync(join(directory, session + ".host.json"), "utf8"));
       return marker.session_id === session && marker.event === "UserPromptSubmit";} catch {return false;}
   };
-  function prepareBatch(project: Project, rows: unknown[], session: string, validateAfterCommit?: true, handling?:IssueHandling) {
+  function prepareBatch(project: Project, rows: unknown[], session: string, validateAfterCommit?: true, handling?:IssueHandling, preserveBlueprintChoices?: true) {
     requireCondition(rows.length > 0 && rows.length <= 50, "BATCH_REVIEW_SIZE_INVALID");
     if(handling){handling=issueHandlingSchema.parse(handling);requireCondition(handling.issues.length===rows.length,"ISSUE_ROWS_MISMATCH");
       requireCondition(new Set(handling.issues.map(i=>i.id)).size===rows.length,"DUPLICATE_ISSUE_ID");validateAfterCommit=true;}
@@ -182,6 +183,8 @@ export function createSingleReviewRouter(directory: string, dbPath: string, laun
       const action = buildAction(preview, {...original, expected_version: preview.model_version});
       const issue=handling?.issues[index];
       const item="item_id" in original?preview.items.find(i=>i.id===original.item_id):undefined;
+      if (issue?.replacement_text && item?.type === "acceptance_criterion")
+        issue.replacement_text = clarifyLocalPatchAcceptance(issue.replacement_text);
       if(handling && item && !item.decision_detail && !item.blueprint_detail && !["decision","solution_blueprint"].includes(item.type) && original.operation==="xmi_item_confirm"){
         editableRows.push(index+1);
         if(item.status==="CONFIRMED")confirmedTextRows.push({index:index+1,statement:item.statement});
@@ -191,10 +194,21 @@ export function createSingleReviewRouter(directory: string, dbPath: string, laun
       if(handling && item?.decision_detail && original.operation==="xmi_item_confirm")optionRows.push({index:index+1,options:item.decision_detail.options.map(o=>o.id)});
       if(issue){if(!issue.affected_ids && item)issue.affected_ids=[item.id];
         requireCondition((issue.affected_ids??[]).every(id=>project.items.some(i=>i.id===id)),"UNKNOWN_ISSUE_SUBJECT");
+        // A replacement is adopted as a whole. Show that exact new text once;
+        // the already-reviewed old body remains in canonical history. Repeating
+        // it both as "complete content" and "original" made long native lists
+        // needlessly fragile to verbatim delivery without adding approval scope.
+        const adoptedContent=issue.replacement_text&&item?["本次操作：修订并采用这条设定",
+          "项目："+quote(project.title),"条目："+quote(item.id)+"；版本："+item.version,
+          "采纳后完整文本：",quote(issue.replacement_text),
+          "类型："+item.type+"；优先级："+(item.priority??"未指定"),
+          ...(item.links?.length?["关联条目：",quote(item.links.join("、"))]:[]),
+          ...(item.tags?.length?["范围标记：",quote(item.tags.join("、"))]:[]),
+          ...(item.supersedes?["替代关联（不会自动改变旧条目）：",quote(item.supersedes)]:[]),
+          "本次以以上完整新文本替换原文；原确认与来源保留在历史记录中。"].join("\n"):action.content;
         action.content=["问题："+quote(issue.problem),...(issue.impact?["影响："+quote(issue.impact)]:[]),
-          ...(issue.recommendation?["建议："+quote(issue.recommendation)]:[]),action.content,
-          ...(item?.status==="CONFIRMED"&&!issue.replacement_text?["原文已确认。直接给出修改文本即可应用；采纳原文会沿用原决定，不重复写入。"]:[]),
-          ...(issue.replacement_text?["原文：",quote(item!.statement),"采纳后完整文本：",quote(issue.replacement_text)]:[])].join("\n");}
+          ...(issue.recommendation?["建议："+quote(issue.recommendation)]:[]),adoptedContent,
+          ...(item?.status==="CONFIRMED"&&!issue.replacement_text?["原文已确认。直接给出修改文本即可应用；采纳原文会沿用原决定，不重复写入。"]:[])].join("\n");}
       ownerReviewCommandSchema.parse(action.command);
       if(!(action.command.kind==="ITEM_TEXT_REVISED"&&item?.status==="CONFIRMED"&&action.command.statement===item.statement))
         preview = previewOwnerAction(preview, action.command);
@@ -206,15 +220,20 @@ export function createSingleReviewRouter(directory: string, dbPath: string, laun
       requireCondition(preview.items.find(i => i.id === command.item_id)?.blueprint_detail?.feasibility_fingerprint === assessFeasibility(preview).fingerprint,
         "BATCH_BLUEPRINT_DEPENDENCY_CHANGED");
     }
-    const continuation = validateAfterCommit ? {validate_after_commit: true as const} : {};
+    const changes = commands.filter(command => command.kind !== "ITEM_TEXT_REVISED" ||
+      project.items.find(item => item.id === command.item_id)?.statement !== command.statement);
+    const carryForward = preserveBlueprintChoices || (changes.length > 0 && !!planBlueprintRefresh(project, preview, changes));
+    const continuation = {...(validateAfterCommit ? {validate_after_commit: true as const} : {}),
+      ...(carryForward ? {preserve_blueprint_choices: true as const} : {})};
     const requestHash = fingerprint({project_id: project.project_id, project_version: project.model_version, requests: rows, ...continuation,
       ...(handling?{issue_handling:handling}:{})});
     const old = readSingle(directory, session), reviewId = old?.status === "PENDING" && old.request_hash === requestHash ? old.review_id : randomUUID();
     const heading = handling?"## 审核问题处理清单\n" as const:"## 收尾确认清单\n" as const;
     const text = heading + `清单编号：${reviewId}\n项目版本：${project.model_version}；本次 ${rows.length} 项，按以下顺序一次应用。\n\n` +
       sections.join("\n\n---\n\n") + "\n\n以上只包含本次明确列出的操作，不代表其他未决事项已经解决。各项仍分别保留确认事件和来源；任一项失败则整批不写入。" +
+      (carryForward ? "\n这批修订沿用已采用蓝图的技术取舍。按上面展示的内容采用后，XMi 会核对技术与风险边界；符合时自动更新蓝图依据。改变技术取舍的内容请单独指出。" : "") +
       (validateAfterCommit ? "\n本批成功写入后，XMi 会在同一轮自动校验写入后的版本。校验结果单独报告。" : "") +
-      (handling?"\n全部同意以上处理请回复“确认”。需要调整可按编号回复：采纳1、3；2忽略；4暂缓。修改普通文本请写：第2项改为：最终完整文本。选择已列选项可写：第3项选OPTION_ID。某项尚不明确可写：第2项修改；其他同意。本次处理回复本身就是确认，不再追加确认清单；未明确的项目不执行，只补问对应项。处理后自动审核，审核通过后继续独立复审；最终导出另行授权。"
+      (handling?"\n全部同意以上处理请回复“确认”。需要调整可按编号回复：采纳1、3；2忽略；4暂缓。修改普通文本请写：第2项改为：最终完整文本。选择已列选项可写：第3项选OPTION_ID。某项尚不明确可写：第2项修改；其他同意。本次处理回复本身就是确认，不再追加确认清单；未明确的项目不执行，只补问对应项。处理后按返回的交付步骤继续校验、复审本轮改动或导出。最终导出另行授权。"
         :"\n全部同意请回复“确认”；需要修改请回复编号和修改内容，修改后重新展示整份清单。不要逐条回复或重复点批准。最终文件导出另行授权。");
     rejectSecrets(text); requireCondition(Buffer.byteLength(text, "utf8") <= 1024 * 1024, "REVIEW_TOO_LARGE");
     const modulePending = readPending(directory, session);
@@ -229,12 +248,12 @@ export function createSingleReviewRouter(directory: string, dbPath: string, laun
       reply: "确认" as const, host_ready: true as const, action: "BATCH" as const,...(handling?{issue_handling:true as const}:{})};
   }
   return {
-    prepare(project: Project, raw: unknown, selected?: string, validateAfterCommit?: true, handling?:IssueHandling) {
+    prepare(project: Project, raw: unknown, selected?: string, validateAfterCommit?: true, handling?:IssueHandling, preserveBlueprintChoices?: true) {
       const session = resolve(selected);
       return withReviewLock(directory, session, () => {
       requireCondition(ready(session), "CHAT_CONFIRMATION_UNAVAILABLE");
       requireCondition(isAbsolute(dbPath) && !dbPath.startsWith("\\\\") && !dbPath.startsWith("//"), "CHAT_CONFIRMATION_UNAVAILABLE");
-      if (Array.isArray(raw)) return prepareBatch(project, raw, session, validateAfterCommit,handling);
+      if (Array.isArray(raw)) return prepareBatch(project, raw, session, validateAfterCommit,handling,preserveBlueprintChoices);
       requireCondition(!handling,"ISSUE_HANDLING_REQUIRES_BATCH");
       const {request, command, action, itemVersion, content, policyReview} = buildAction(project, raw);
       const requestHash = fingerprint(request);
@@ -293,7 +312,9 @@ export function createSingleReviewRouter(directory: string, dbPath: string, laun
       let project: Project;
       try {
         project = record.action === "BATCH" ? record.commands?.length?service.confirmActions({project_id: projectId, project_version: expectedVersion,
-          review_id: reviewId, commands: record.commands}, source, unchanged):service.get(projectId) :
+          review_id: reviewId, commands: record.commands,
+          ...(record.preserve_blueprint_choices && record.issue_handling?.choices?.some(choice => choice.action === "REVISE") !== true
+            ? {preserve_blueprint_choices: true} : {})}, source, unchanged):service.get(projectId) :
           service.execute({project_id:projectId,expected_version:expectedVersion,idempotency_key:"chat-item-review:"+reviewId,command:authorized},record.actor,unchanged);
         if(record.action==="BATCH" && !record.commands?.length){requireCondition(project.model_version===expectedVersion,"VERSION_CONFLICT");unchanged();}
       } catch (error) {

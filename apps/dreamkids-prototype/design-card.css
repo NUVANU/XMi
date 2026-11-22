@@ -1,0 +1,8 @@
+.xmi-design-card { color: inherit; font: inherit; }
+.xmi-design-card li small, .xmi-design-card fieldset label { display: block; }
+.xmi-design-card .xmi-flow { display: grid; gap: .55rem; padding-inline-start: 2rem; }
+.xmi-flow li { border: 1px solid currentColor; border-radius: .6rem; padding: .55rem .85rem; }
+.xmi-flow li[data-kind="CHOICE"] { border-style: dashed; }
+.xmi-flow li[data-kind="OUTCOME"] { border-width: 2px; }
+.xmi-flow span { display: block; margin-block-start: .25rem; }
+.xmi-design-card button { margin: .6rem .6rem .3rem 0; }

@@ -89,7 +89,7 @@ test("M2 discovery advertises exact narrow, typed tools with explicit safety hin
   // This advances the old M2/M6 exact-count assertion without weakening any tool safety check.
   assert.equal(listed.tools.length, 26); // Deferred reviewer prototypes are absent from the default catalog.
   assert.deepEqual(listed.tools.map((d) => d.name).sort(), Object.keys(metadata)
-    .filter(name => !["xmi_spec_review_start", "xmi_spec_review_status"].includes(name)).sort());
+    .filter(name => !["xmi_spec_review_start", "xmi_spec_review_status", "xmi_prototype_preview"].includes(name)).sort());
   for (const tool of listed.tools) {
     assert.equal(tool.inputSchema.type, "object");
     assert.equal(tool.inputSchema.additionalProperties, false);

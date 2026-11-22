@@ -41,6 +41,14 @@ test("configured-home STDIO uses one home for native confirmation and independen
       requests:[{operation:"xmi_item_confirm",schema_version:"0.1.0",project_id:p.project_id,expected_version:p.model_version,
         idempotency_key:"TEST_ONLY-confirm",item_id:item.id,item_version:item.version,fingerprint:itemFingerprint(item),intent:"CONFIRM"}]});
     assert.match(String(prepared.review_text),/AC-HOME-ONLY/);
+    const stop=(text:string)=>spawnSync(process.execPath,["--input-type=module","-e",
+      `import {runStopHook} from ${JSON.stringify(new URL("../apps/local-module-review/stop-check.ts",import.meta.url).href)};await runStopHook();`],
+      {env,input:JSON.stringify({hook_event_name:"Stop",session_id:session,stop_hook_active:false,last_assistant_message:text}),encoding:"utf8"});
+    const exactStop=stop(String(prepared.review_text));assert.equal(exactStop.status,0,exactStop.stderr);
+    assert.deepEqual(JSON.parse(exactStop.stdout),{});
+    const badStop=stop(String(prepared.review_text).replace("AC-HOME-ONLY","AC-HOME-ONLY-ALTERED"));assert.equal(badStop.status,0,badStop.stderr);
+    assert.equal(JSON.parse(badStop.stdout).decision,"block");
+    assert.equal(service.get(p.project_id).model_version,p.model_version);
     writeFileSync(log,[{type:"session_meta",payload:{id:session}},{type:"response_item",payload:{type:"message",role:"assistant",phase:"final_answer",
       content:[{type:"output_text",text:prepared.review_text}]}}].map(row=>JSON.stringify(row)+"\n").join(""));
     assert.match(hook("确认"),/xmi_item_review_commit/);

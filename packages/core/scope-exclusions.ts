@@ -51,3 +51,11 @@ export function hasExternalIntegrationScope(item: Item): boolean {
   return item.type === "integration" && !hasExclusion(item.statement, "integration") ||
     /integration|provider|\bapi\b|email|notification|webhook|oauth|map|ai service|集成|供应商|接口|邮件|通知|地图|外部服务/i.test(text);
 }
+
+/** Deliberately local matching, retaining any positive clause in a mixed statement. */
+export function hasOnlineGameScope(statement: string): boolean {
+  const explicitExclusion = /^(?:本版|原型|首版)?\s*(?:无|不支持|不接入|不包含|无需)\s*(?:多人联机|联机|多人)(?:模式|功能)?\s*$/u;
+  const signal = /online|multiplayer|network|matchmaking|server|联机|多人|网络|匹配|服务器|各自(?:的)?设备.{0,28}(?:同一|一起|共享|对战|竞技)|(?:两台|不同|多台)设备.{0,24}(?:同一|一起|共享|同步)|跨设备.{0,16}(?:同局|同步|对战)/i;
+  return statement.split(/[。；;，,\n]|但是|但/u).some(clause =>
+    !explicitExclusion.test(clause.trim()) && signal.test(clause));
+}

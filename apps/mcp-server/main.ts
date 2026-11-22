@@ -30,6 +30,7 @@ async function main(nativeReview: boolean, hybrid?: HybridConnector) {
     sessions: codexReviewPaths().sessions, native: moduleReviewDirectory()}) : undefined;
   const workspaces = new ProjectWorkspaces(join(dirname(path), "xmi-project-locations.sqlite"));
   const server = createXmiServer(service, {storagePath: path, moduleReview, singleReview, hostSpecReview, workspaces, hybrid,
+    dreamKidsPrototype: process.env.XMI_DREAMKIDS_PROTOTYPE === "1",
     workspaceOptions: binding => {
       const reviewer = nativeReview ? new DocumentReviewRunner({directory: projectPath(binding.root, ".xmi", "reviews"),
         sessions: codexReviewPaths().sessions, native: moduleReviewDirectory()}) : undefined;

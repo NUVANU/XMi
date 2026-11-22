@@ -42,3 +42,11 @@ npm run configure -- --host workbuddy --data-dir "D:/XMi-workbuddy-data"
 ## V0.1.2 确认与架构
 
 只展示本次完整待处理项，沿用未变化的已确认内容。方案确认后自动生成当前版本 24 章架构，再按宿主支持能力进行建议性独立内容评审。报告、架构和评审启动不追加产品确认；导出仍须针对确切包授权。详见 [工作流](WORKFLOW.md) 与 [当前验收范围](PLATFORMS.md)。
+
+## 2026-11-22 source update / 本次源码升级
+
+Use the current repository source for this update; the fixed v0.1.2 Release attachments predate it. The package version remains 0.1.2, so record the commit as well. Read [the update note](UPDATE-20261122.md).
+
+Back up the existing database and preserve its project ID and routing before switching the source entry. The additive blueprint-binding event needs a current reader; do not point an older reader at updated data. Keep the pre-upgrade backup for rollback. Do not overwrite a running database or use the first-use helper to take over an existing one.
+
+The generated Codex plugin now includes **Stop** and **UserPromptSubmit** hooks. Review/trust the changed hooks through the supported host UI, regenerate the plugin configuration where appropriate, and reconnect. Stop only checks delivery of the pending checklist; it does not grant consent. Replacing files does not prove an already-open session reloaded them. 原型适配器需要本地宿主显式接入，普通 Codex 安装无需开启它。

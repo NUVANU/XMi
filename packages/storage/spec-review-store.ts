@@ -90,6 +90,14 @@ export class SqliteSpecReviewStore {
       AND json_extract(e.body,'$.host.interview_module') IS NULL ORDER BY r.rowid DESC LIMIT 1`).get(projectId);
     return row ? this.get(projectId, String(row.run_id)) : null;
   }
+  previousCompletedDocumentReview(projectId: string, modelVersion: number): StoredSpecReview | null {
+    const row = this.db.prepare(`SELECT r.run_id FROM review_requests r JOIN review_events e ON e.run_id=r.run_id AND e.seq=3
+      WHERE r.project_id=? AND json_extract(e.body,'$.host.purpose')='DOCUMENT_REVIEW'
+      AND json_extract(e.body,'$.host.interview_module') IS NULL AND json_extract(e.body,'$.state')='COMPLETED'
+      AND json_extract(e.body,'$.product_model_version') < ?
+      ORDER BY json_extract(e.body,'$.product_model_version') DESC, r.rowid DESC LIMIT 1`).get(projectId, modelVersion);
+    return row ? this.get(projectId, String(row.run_id)) : null;
+  }
   prepare(bundle: ReviewBundle, key: string, host?: HostReviewBinding): StoredSpecReview {
     validateReviewBundle(bundle);
     requireCondition(key.length > 0 && key.length <= 100, "SPEC_REVIEW_REQUEST_INVALID");

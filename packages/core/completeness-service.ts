@@ -6,7 +6,7 @@ import { riskContext, unsafeExclusionItems } from "./risk-context.ts";
 import { assessFeasibility } from "./solution-feasibility.ts";
 import { solutionBlockingInputs } from "./solution-options.ts";
 import { paymentScope } from "./payment-scope.ts";
-import {explicitlyExcludesScope, hasAccountOrPrivateScope, hasExternalIntegrationScope} from "./scope-exclusions.ts";
+import {explicitlyExcludesScope, hasAccountOrPrivateScope, hasExternalIntegrationScope, hasOnlineGameScope} from "./scope-exclusions.ts";
 
 const ranks: Record<DeliveryMode, number> = {FAST_VALIDATION: 0, FAST_DEVELOPMENT: 1, PRODUCT_GRADE: 2};
 const targets: Record<DeliveryMode, "PROTOTYPE_READY" | "BUILD_READY" | "PRODUCT_SPEC_READY"> = {
@@ -118,8 +118,10 @@ function applicabilitySignal(project: Project, key: ApplicabilityKey): boolean {
   if (key === "ACCOUNT_OR_PRIVATE") return items.some(hasAccountOrPrivateScope);
   if (key === "COMMERCIAL") return items.some((item) =>
     /payment|paid|billing|price|subscription|refund|charge|quota|支付|付费|账单|价格|订阅|退款|额度/i.test(text(item)));
-  if (key === "GAME_ONLINE") return items.some((item) =>
-    /online|multiplayer|network|matchmaking|server|联机|多人|网络|匹配|服务器/i.test(text(item)));
+  if (key === "GAME_ONLINE") return items.some((item) => {
+    const tags = item.tags?.filter(tag => tag !== "profile-applicability:game_online:not-applicable");
+    return hasOnlineGameScope(item.statement) || hasOnlineGameScope((tags ?? []).join(" "));
+  });
   return items.some(hasExternalIntegrationScope);
 }
 function applicability(project: Project, key: ApplicabilityKey): {value: Applicability; conflict: boolean} {

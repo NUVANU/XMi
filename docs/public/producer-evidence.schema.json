@@ -133,6 +133,7 @@
             "DELIVERY_MODE_SELECTED",
             "DELIVERY_MODE_UPGRADED",
             "ITEM_CONFIRMED",
+            "ITEM_TEXT_REVISED",
             "DECISION_APPROVED",
             "SOLUTION_BLUEPRINT_APPROVED",
             "SOLUTION_BLUEPRINT_DELEGATED",
@@ -277,6 +278,7 @@
                     "command_kind": {
                       "enum": [
                         "ITEM_CONFIRMED",
+                        "ITEM_TEXT_REVISED",
                         "DECISION_APPROVED",
                         "SOLUTION_BLUEPRINT_APPROVED",
                         "SOLUTION_BLUEPRINT_DELEGATED"

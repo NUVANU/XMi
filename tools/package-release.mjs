@@ -15,7 +15,7 @@ const walk=(root,directory)=>readdirSync(join(root,directory),{withFileTypes:tru
 export function publicFiles(root) {
   const load=read(root),files=new Map();
   const paths=['package.json','package-lock.json','tsconfig.json','eslint.config.mjs','.node-version','LICENSE','CONTRIBUTING.md','SECURITY.md','CHANGELOG.md',
-    ...['packages','schemas','samples','apps/mcp-server','apps/local-module-review','apps/dreamkids-prototype','plugins/xmi','tests','tools','.github','docs/public','docs/adr'].flatMap(p=>walk(root,p)),
+    ...['packages','schemas','samples','apps/mcp-server','apps/local-module-review','apps/windows-formal-review','apps/dreamkids-prototype','plugins/xmi','tests','tools','.github','docs/public','docs/adr'].flatMap(p=>walk(root,p)),
     ...readdirSync(join(root,'docs')).filter(p=>/^\d\d-.*\.md$/.test(p)).map(p=>'docs/'+p),
     ...['M0-CAPABILITY-REPORT.md','M0-IMPLEMENTATION-DECISION.md','M0-MILESTONE-REPORT.md','M10-MILESTONE-REPORT.md','M11-OWNER-ACCEPTANCE.md'].map(p=>'docs/'+p),
     'docs/evidence/M3-FORWARD-TESTS.json',

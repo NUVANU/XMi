@@ -1,15 +1,17 @@
 import test from "node:test";
 import type {TestContext} from "node:test";
 import assert from "node:assert/strict";
-import {mkdtempSync,  rmSync, writeFileSync} from "node:fs";
+import {mkdirSync, mkdtempSync, rmSync, writeFileSync} from "node:fs";
 import fs from "node:fs";
 import {syncBuiltinESMExports} from "node:module";
 import {tmpdir} from "node:os";
+
 import {join} from "node:path";
 import {Client} from "@modelcontextprotocol/sdk/client/index.js";
 import {InMemoryTransport} from "@modelcontextprotocol/sdk/inMemory.js";
 import {Ajv2020} from "ajv/dist/2020.js";
 import {createXmiServer, toolDescriptors} from "../apps/mcp-server/server.ts";
+import {DocumentReviewRunner} from "../apps/mcp-server/document-review.ts";
 import {inputs, outputs} from "../apps/mcp-server/contracts.ts";
 import {createSingleReviewRouter, readSingle} from "../apps/local-module-review/single.ts";
 import {createModuleReviewHost} from "../apps/local-module-review/adapter.ts";
@@ -18,11 +20,13 @@ import {ProjectService, replay} from "../packages/core/project-service.ts";
 import {SqliteProjectStore} from "../packages/storage/sqlite.ts";
 import {InterviewService} from "../packages/core/interview-service.ts";
 import {SolutionService} from "../packages/core/solution-service.ts";
+
 import {evaluateRisk} from "../packages/core/completeness-service.ts";
 import {itemFingerprint, modeFingerprint} from "../packages/core/validation.ts";
 import {reviewProjectService} from "./fixtures/spec-review-project.ts";
 import {DomainError} from "../packages/core/errors.ts";
 import type {DomainEvent} from "../packages/shared-types/domain.ts";
+
 
 const session = "00000000-0000-4000-8000-000000000001", turn = "00000000-0000-4000-8000-000000000002";
 const source = {type: "conversation_turn" as const, ref: "fixture:closing-review"};
@@ -49,9 +53,29 @@ function fixture(t: TestContext, withBlueprint = true, history?: DomainEvent[]) 
   const prepare = (requests: unknown[]) => router.prepare(service.get(p.project_id), requests, session);
   const commit = () => {const r = readSingle(directory, session)!; return router.commit(r.project_id, r.project_version, r.review_id, session);};
   prompt("继续");
-  t.after(() => {store.close(); rmSync(directory, {recursive: true, force: true});});
-  return {directory, db, service, p, router, prompt, display, run, add, args, prepare, commit};
+  const disposers: (() => void)[] = [];
+  t.after(() => {for (const dispose of disposers) dispose(); store.close(); rmSync(directory, {recursive: true, force: true});});
+  return {directory, db, service, p, router, prompt, display, run, add, args, prepare, commit, disposers};
 }
+test("an observed finalization schedules the written snapshot; preparation, missing consent and stale replay do not", t => {
+  const f = fixture(t);
+  const notified: {version: number; database: string}[] = [];
+  const router = createSingleReviewRouter(f.directory, f.db, undefined, f.service, (project, database) => {
+    assert.deepEqual(f.service.get(project.project_id), project);
+    notified.push({version: project.model_version, database});
+  });
+  const current = f.add("REQ-FORMAL-TRIGGER");
+  const prepared = router.prepare(current, [f.args("REQ-FORMAL-TRIGGER")], session, true);
+  const commit = () => router.commit(current.project_id, current.model_version, prepared.review_id, session);
+  assert.throws(commit, {code: "NATIVE_OWNER_REPLY_REQUIRED"});
+  assert.deepEqual(notified, []);
+  f.display(prepared.review_text); f.prompt("确认");
+  const written = commit();
+  assert.deepEqual(notified, [{version: written.model_version, database: f.db}]);
+  f.add("REQ-LATER");
+  assert.equal(commit().model_version, written.model_version);
+  assert.equal(notified.length, 1);
+});
 
 test("finalization batch uses the unified confirmation reply without accepting qualified blanket assent",t=>{
   const f=fixture(t);f.add("REQ-UNIFIED");const prepared=f.prepare([f.args("REQ-UNIFIED")]);
@@ -229,7 +253,12 @@ for (const withBlueprint of [true, false]) {
     const before = f.service.get(f.p.project_id);
     const priorItems = before.items.filter(item => item.status === "CONFIRMED");
     const beforeEvents = f.service.history(before.project_id).length;
-    const server = createXmiServer(f.service, {singleReview: f.router});
+    const sessions = join(f.directory, "sessions"), date = join(sessions, "2026", "11", "23");
+    mkdirSync(date, {recursive: true});
+    writeFileSync(join(date, `rollout-${session}.jsonl`), JSON.stringify({type: "session_meta", payload: {id: session}}) + "\n");
+    const reviewer = new DocumentReviewRunner({directory: join(f.directory, "reviews"), sessions, native: f.directory});
+    f.disposers.push(() => reviewer.close());
+    const server = createXmiServer(f.service, {singleReview: f.router, hostSpecReview: reviewer});
     const client = new Client({name: "finalization-fixture", version: "1"}, {capabilities: {}});
     const [a, b] = InMemoryTransport.createLinkedPair();
     await server.connect(a);
@@ -246,7 +275,8 @@ for (const withBlueprint of [true, false]) {
     const {data} = prepared.structuredContent as {data: {review_id: string; review_text: string}};
     assert.match(data.review_text, /同一轮自动校验写入后的版本/u);
     type Receipt = {model_version: number; post_commit_validation: {ok: true; data: {model_version: number; detail?: "summary";
-      validation: {package_valid: boolean}}} | {ok: false; error: {code: string}}};
+      validation: {package_valid: boolean}}} | {ok: false; error: {code: string}};
+      post_commit_review?: {ok: boolean; data?: {state: string; run_id: string; model_version: number; host_job: unknown}}};
     const commit = async (summary = true) => {
       const result = await client.callTool({name: "xmi_item_review_commit", arguments: {...binding, review_id: data.review_id,
         ...(summary ? {validation_detail: "summary"} : {})}});
@@ -268,9 +298,14 @@ for (const withBlueprint of [true, false]) {
       assert.equal(validation.data.detail, "summary");
       assert.equal(validation.data.model_version, receipt.model_version);
       assert.equal(validation.data.validation.package_valid, true);
+      assert.equal(receipt.post_commit_review?.ok, true);
+      assert.equal(receipt.post_commit_review?.data?.model_version, receipt.model_version);
+      assert.equal(receipt.post_commit_review?.data?.state, "AWAITING_AGENT");
+      assert.ok(receipt.post_commit_review?.data?.host_job);
     } else {
       assert.ok(!validation.ok);
       assert.equal(validation.error.code, "XSPEC_BLUEPRINT_REQUIRED");
+      assert.equal(receipt.post_commit_review, undefined);
     }
     assert.equal(readSingle(f.directory, session)?.status, "APPLIED");
     const after = f.service.get(before.project_id);
@@ -279,6 +314,7 @@ for (const withBlueprint of [true, false]) {
     assert.equal(f.service.history(before.project_id).length, beforeEvents + 1);
     const retried = await commit(false);
     assert.equal(retried.ok, true);
+    if (retried.ok) assert.equal(retried.data.post_commit_review?.data?.run_id, receipt.post_commit_review?.data?.run_id);
     if (retried.ok && retried.data.post_commit_validation.ok) assert.equal(retried.data.post_commit_validation.data.detail, undefined);
     assert.equal(f.service.history(before.project_id).length, beforeEvents + 1);
 

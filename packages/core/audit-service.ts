@@ -16,6 +16,17 @@ export const auditFindingSchema = z.strictObject({
 });
 export type AuditFinding = z.infer<typeof auditFindingSchema>;
 
+export const formalReviewRecoverySchema = z.strictObject({
+  source_coverage: z.enum(["COMPLETE", "PARTIAL", "UNAVAILABLE"]),
+  verified_item_count: z.number().int().nonnegative(),
+  mode_verified: z.boolean(),
+  verified_scope_count: z.number().int().nonnegative(),
+  previous_run_id: z.uuid().nullable(),
+  recovered_confirmation_count: z.number().int().nonnegative(),
+  previous_unresolved_count: z.number().int().nonnegative(),
+  needs_formal_review: z.boolean(),
+});
+
 export const auditResultSchema = z.strictObject({
   audit_run_id: z.string().regex(/^AUDIT-[A-Z0-9-]+$/),
   project_id: z.string().regex(/^XMI-[A-Z0-9-]+$/),
@@ -23,9 +34,12 @@ export const auditResultSchema = z.strictObject({
   target_mode: z.enum(["FAST_VALIDATION", "FAST_DEVELOPMENT", "PRODUCT_GRADE"]).nullable(),
   assurance_level: z.enum(["BASIC_SELF_CHECK", "INDEPENDENT_SPEC_REVIEW", "INDEPENDENT_PRODUCT_AUDIT"]).nullable(),
   deterministic_status: z.enum(["PASS", "BLOCKING"]),
-  independent_review_status: z.literal("UNAVAILABLE"),
-  isolation_status: z.literal("BOUNDED_SNAPSHOT_FALLBACK"),
-  readiness_eligible: z.literal(false),
+  independent_review_status: z.enum(["UNAVAILABLE", "PASS", "BLOCKING"]),
+  isolation_status: z.enum(["BOUNDED_SNAPSHOT_FALLBACK", "WINDOWS_APPCONTAINER_AND_TOOL_FREE_HOST"]),
+  readiness_eligible: z.boolean(),
+  formal_receipt: z.strictObject({run_id: z.uuid(), snapshot_sha256: z.string().regex(/^[a-f0-9]{64}$/u),
+    bundle_sha256: z.string().regex(/^[a-f0-9]{64}$/u)}).optional(),
+  formal_review_recovery: formalReviewRecoverySchema.optional(),
   findings: z.array(auditFindingSchema),
   evaluated_at: z.iso.datetime(),
   state_fingerprint_before: z.string().regex(/^[a-f0-9]{64}$/),
@@ -34,6 +48,9 @@ export const auditResultSchema = z.strictObject({
   limitation: z.string().min(1).max(4000),
 });
 export type AuditResult = z.infer<typeof auditResultSchema>;
+
+export type FormalSpecAudit = {run_id: string; snapshot_sha256: string; bundle_sha256: string;
+  findings: {severity: "INFO" | "WARNING" | "BLOCKING"; statement: string; affected_ids: string[]}[]; unresolved_ids: string[]};
 
 const active = (item: Item) => item.status !== "REJECTED" && item.status !== "SUPERSEDED";
 const confirmed = (project: Project) => project.items.filter((item) => item.status === "CONFIRMED");
@@ -64,7 +81,7 @@ function linkedAcceptance(project: Project, requirement: Item): Item[] {
  * the returned result marks independent review unavailable until that outer boundary is verified.
  */
 export class AuditService {
-  run(project: Project): AuditResult {
+  run(project: Project, verified?: FormalSpecAudit): AuditResult {
     const before = fingerprint(project);
     const snapshot = structuredClone(project);
     const findings: AuditFinding[] = [];
@@ -128,23 +145,35 @@ export class AuditService {
     const ordered = findings.sort((a, b) => a.id.localeCompare(b.id));
     const after = fingerprint(project);
     const mode = snapshot.delivery_policy?.effective_mode ?? null;
-    const runSeed = {project_id: snapshot.project_id, model_version: snapshot.model_version, mode, findings: ordered};
+    const formal = verified?.snapshot_sha256 === before ? verified : undefined;
+    const formalBlocking = !!formal && (formal.unresolved_ids.length > 0 || formal.findings.some(entry => entry.severity === "BLOCKING"));
+    const combined = formal ? [...ordered, ...formal.findings.map(entry => ({
+      ...finding("INDEPENDENT_SPEC_REVIEW", entry.statement, entry.affected_ids.slice(0, 50)), severity: entry.severity,
+    }))] : ordered;
+    if (formal?.unresolved_ids.length) combined.push(finding("INDEPENDENT_SPEC_UNRESOLVED",
+      "The formal specification review identified unresolved items.", formal.unresolved_ids.slice(0, 50)));
+    const deterministic = ordered.some(entry => entry.severity === "BLOCKING") ? "BLOCKING" : "PASS";
+    const runSeed = {project_id: snapshot.project_id, model_version: snapshot.model_version, mode, findings: ordered,
+      ...(formal ? {formal_run: formal.run_id} : {})};
     const result: AuditResult = {
       audit_run_id: `AUDIT-${fingerprint(runSeed).slice(0, 16).toUpperCase()}`,
       project_id: snapshot.project_id,
       product_model_version: snapshot.model_version,
       target_mode: mode,
-      assurance_level: mode ? assurance[mode] : null,
-      deterministic_status: ordered.some((entry) => entry.severity === "BLOCKING") ? "BLOCKING" : "PASS",
-      independent_review_status: "UNAVAILABLE",
-      isolation_status: "BOUNDED_SNAPSHOT_FALLBACK",
-      readiness_eligible: false,
-      findings: ordered,
+      assurance_level: formal ? "INDEPENDENT_SPEC_REVIEW" : mode ? assurance[mode] : null,
+      deterministic_status: deterministic,
+      independent_review_status: formal ? formalBlocking ? "BLOCKING" : "PASS" : "UNAVAILABLE",
+      isolation_status: formal ? "WINDOWS_APPCONTAINER_AND_TOOL_FREE_HOST" : "BOUNDED_SNAPSHOT_FALLBACK",
+      readiness_eligible: !!formal && !formalBlocking && deterministic === "PASS" && before === after,
+      ...(formal ? {formal_receipt: {run_id: formal.run_id, snapshot_sha256: formal.snapshot_sha256, bundle_sha256: formal.bundle_sha256}} : {}),
+      findings: combined,
       evaluated_at: snapshot.updated_at,
       state_fingerprint_before: before,
       state_fingerprint_after: after,
       state_unchanged: before === after && canonical(project) === canonical(structuredClone(project)),
-      limitation: "M8 deterministic rules ran over a bounded cloned Product Model snapshot with no write-capable service. Effective shell/host isolation and the independent LLM review step are not verified in this environment, so this result cannot by itself satisfy a mode that requires independent review.",
+      limitation: formal
+        ? "The verified receipt covers independent specification review of this exact snapshot. Product Audit, consumer validation and exact export remain separate."
+        : "M8 deterministic rules ran over a bounded cloned Product Model snapshot with no write-capable service. Effective shell/host isolation and the independent LLM review step are not verified in this environment, so this result cannot by itself satisfy a mode that requires independent review.",
     };
     return auditResultSchema.parse(result);
   }

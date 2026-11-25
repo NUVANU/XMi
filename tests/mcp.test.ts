@@ -89,7 +89,8 @@ test("M2 discovery advertises exact narrow, typed tools with explicit safety hin
   // This advances the old M2/M6 exact-count assertion without weakening any tool safety check.
   assert.equal(listed.tools.length, 26); // Deferred reviewer prototypes are absent from the default catalog.
   assert.deepEqual(listed.tools.map((d) => d.name).sort(), Object.keys(metadata)
-    .filter(name => !["xmi_spec_review_start", "xmi_spec_review_status", "xmi_prototype_preview"].includes(name)).sort());
+    .filter(name => !["xmi_spec_review_start", "xmi_spec_review_status", "xmi_prototype_preview", "xmi_prototype_export",
+      "xmi_blueprint_binding_refresh", "xmi_finalize"].includes(name)).sort());
   for (const tool of listed.tools) {
     assert.equal(tool.inputSchema.type, "object");
     assert.equal(tool.inputSchema.additionalProperties, false);
@@ -362,7 +363,7 @@ test("Owner-approved conversation drafts auto-save while material and inferred w
   for (const [index, candidate] of nonDrafts.entries()) {
     const blocked = await call(client, "xmi_patch_apply", {...base(p.project_id), expected_version: 2,
       idempotency_key: "blocked-" + index, patch: {kind: "ADD_CANDIDATE", candidate}});
-    assert.equal(blocked.error.code, "CONSENT_UNAVAILABLE");
+    assert.equal(blocked.error.code, candidate.type === "solution_blueprint" ? "INVALID_PROJECT_SCHEMA" : "CONSENT_UNAVAILABLE");
   }
   const secret = await call(client, "xmi_patch_apply", {...base(p.project_id), expected_version: 2,
     idempotency_key: "secret-draft", patch: {kind: "ADD_CANDIDATE", candidate: {

@@ -46,7 +46,7 @@ async function connect(path: string, stderr: string[]) {
 }
 
 // Synthetic consent is isolated to this test's temporary database and transcript.
-async function review(client: Client, operation: "xmi_patch_apply" | "xmi_item_confirm" | "xmi_delivery_mode_select", args: Record<string,unknown>) {
+async function review(client: Client, operation: "xmi_item_confirm" | "xmi_delivery_mode_select", args: Record<string,unknown>) {
   const blocked=await call(client,operation,args);
   assert.equal(blocked.error.code,"CHAT_REVIEW_REQUIRED");
   const prepared=await call(client,"xmi_item_review_prepare",{schema_version:"0.1.0",session_id:nativeSession,request:{...args,operation}});
@@ -210,7 +210,7 @@ test("M9 same-surface STDIO harness exercises a wider tool-only workflow and res
     assert.equal(resume.data!.solution_review.status, "PROPOSAL_AVAILABLE");
     const blueprintPatch = resume.data!.solution_review.proposed_patch;
     assert.ok(blueprintPatch);
-    const savedBlueprint = await review(a, "xmi_patch_apply", {...base(projectId), expected_version: modelVersion,
+    const savedBlueprint = await call(a, "xmi_patch_apply", {...base(projectId), expected_version: modelVersion,
       idempotency_key: "m9-save-blueprint", patch: blueprintPatch});
     assert.equal(savedBlueprint.ok, true);
     modelVersion = savedBlueprint.data!.model_version as number;

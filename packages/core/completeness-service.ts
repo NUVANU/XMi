@@ -49,7 +49,7 @@ export type M7ReadinessEvidence = {
 export type M8AuditEvidence = {
   audit_run_id: string | null;
   audit_status: "PASS" | "BLOCKING" | "UNAVAILABLE";
-  isolation_status: "BOUNDED_SNAPSHOT_FALLBACK" | "UNAVAILABLE";
+  isolation_status: "BOUNDED_SNAPSHOT_FALLBACK" | "WINDOWS_APPCONTAINER_AND_TOOL_FREE_HOST" | "UNAVAILABLE";
   assurance_level: "BASIC_SELF_CHECK" | "INDEPENDENT_SPEC_REVIEW" | "INDEPENDENT_PRODUCT_AUDIT" | null;
   blocking_finding_count: number;
 };

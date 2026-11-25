@@ -1,17 +1,13 @@
 import {existsSync, mkdirSync, readFileSync, writeFileSync} from "node:fs";
 import {dirname, join} from "node:path";
 import {DatabaseSync} from "node:sqlite";
-import {z} from "zod";
 import {ProjectService, replay} from "../../packages/core/project-service.ts";
 import {requireCondition} from "../../packages/core/errors.ts";
 import {fingerprint, validateProject} from "../../packages/core/validation.ts";
 import {SqliteProjectStore} from "../../packages/storage/sqlite.ts";
-import {atomicProjectText, boundedProjectJson, ensureProjectDirectory, projectDirectory, projectPath} from "../../packages/storage/project-files.ts";
+import {atomicProjectText, boundedProjectJson, ensureProjectDirectory, localProjectManifestSchema, projectDirectory, projectPath} from "../../packages/storage/project-files.ts";
 import {contextCurrent, markContextUpdating, projectGuide, writeProjectContext} from "../../packages/storage/project-context.ts";
 
-const manifestSchema = z.strictObject({schema_version: z.literal("XMI-LOCAL-PROJECT/1"),
-  project_id: z.string().regex(/^XMI-[A-Z0-9-]+$/u).nullable(), create_hash: z.string().regex(/^[a-f0-9]{64}$/u),
-  database: z.literal("xmi-state.sqlite")});
 export type LocalProject = {root: string; id: string; database: string; store: SqliteProjectStore; service: ProjectService; close: () => void};
 export type ProjectStorageStatus = {project_directory: string; database_relative_path: ".xmi/xmi-state.sqlite";
   context_status: "CURRENT" | "STALE"; canonical_version: number; reason: string};
@@ -62,7 +58,7 @@ export class ProjectWorkspaces {
       writeFileSync(pathToManifest, JSON.stringify({schema_version: "XMI-LOCAL-PROJECT/1", project_id: null,
         create_hash: hash, database: "xmi-state.sqlite"}) + "\n", {flag: "wx", mode: 0o600});
     }
-    const manifestPath = projectPath(root, ".xmi", "project.json"), manifest = manifestSchema.parse(boundedProjectJson(manifestPath));
+    const manifestPath = projectPath(root, ".xmi", "project.json"), manifest = localProjectManifestSchema.parse(boundedProjectJson(manifestPath));
     requireCondition(manifest.create_hash === hash, "PROJECT_DIRECTORY_OCCUPIED");
     const guide = projectPath(root, "XMI-START-HERE.md");
     requireCondition(!existsSync(guide) || manifest.project_id !== null &&
@@ -91,7 +87,7 @@ export class ProjectWorkspaces {
     const selected = path ? projectDirectory(path) : this.previous(id); if (!selected) return undefined;
     requireCondition(existsSync(selected), "PROJECT_DIRECTORY_NOT_FOUND"); const root = projectDirectory(selected);
     this.checkLocation(id, root);
-    const manifest = manifestSchema.parse(boundedProjectJson(projectPath(root, ".xmi", "project.json")));
+    const manifest = localProjectManifestSchema.parse(boundedProjectJson(projectPath(root, ".xmi", "project.json")));
     requireCondition(manifest.project_id === id, "PROJECT_IDENTITY_MISMATCH");
     const database = projectPath(root, ".xmi", manifest.database); requireCondition(existsSync(database), "PROJECT_DATABASE_MISSING");
     const store = new SqliteProjectStore(database, root), service = new ProjectService(store);

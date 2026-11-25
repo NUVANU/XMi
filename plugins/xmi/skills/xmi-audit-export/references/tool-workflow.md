@@ -6,7 +6,7 @@ Set validate_after_commit: true on the final native requests batch unless the Ow
 
 ## Optional independent review
 
-For the native HOST_AGENT route, follow host-agent-review.md. A host without a supported native adapter remains UNAVAILABLE; never fabricate a review or use synthetic test authority.
+For the real native HOST_AGENT route, follow host-agent-review.md. Generic hosts remain unavailable. For the internal TEST_ONLY compatibility route, use `xmi_spec_review_start` with the exact current project version and idempotency key; query a known run with `xmi_spec_review_status`, respecting findings totals/next offset and item/document/scope coverage. Production is unconfigured and returns UNAVAILABLE without saving or sending materials. TEST_ONLY synthetic records never count as real review. Do not submit reviewer identities, JSON approvals, endpoints, credentials, isolation flags or PASS. Do not start a Codex child session or configure a service as a workaround. Do not enable a new review runtime or a formal assurance platform as part of this content-review cycle. Do not request its configuration as the next step in ordinary delivery. Existing formal readiness and strict package validation remain authoritative, while valid NOT_READY candidate export is allowed under exact consent.
 
 ## Existing audit/export sequence
 
@@ -23,9 +23,9 @@ F-2 remains PARTIALLY_CLOSED. XDEV-DELIVERY-HANDOFF/1 semantics are frozen, but 
 
 ## Local continuity and text fallback
 
-To continue in a new supported local host session, reconnect to the same SQLite-backed service and resume the project ID. An old transcript does not establish current consent.
+For M9 local private testing, a new supported local surface/session must reconnect to the same canonical SQLite-backed XMi service and resume by project id. The prior transcript is not a prerequisite. Tool results and generated Markdown are the required fallback; custom UI is optional and must not become a second state path.
 
-This public package supplies a local connection, not a hosted ChatGPT endpoint. A local subprocess restart does not prove a second host surface; report unexecuted host checks accurately.
+Remote ChatGPT connectivity is outside M9 by explicit Owner scope decision. Do not reinterpret a local subprocess restart as a second host surface, and do not mark unexecuted host installation/invocation checks as passed.
 
 
 ## Direct issue handling

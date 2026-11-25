@@ -23,7 +23,7 @@ export type DocumentReviewSummary = z.infer<typeof documentReviewSummarySchema>;
 export const deliveryWorkflowSchema = z.strictObject({
   stage: z.enum(["CHECK_SPEC", "OFFER_REVIEW", "WAIT_REVIEW", "REFRESH_REVIEW", "REVIEW_FINDINGS", "VERIFY_INCREMENT", "REVIEW_UNAVAILABLE", "VALIDATE_SPEC", "READY_TO_EXPORT", "EXPORTED"]),
   document_review: documentReviewSummarySchema, package_valid: z.boolean().nullable(), review_optional: z.literal(true),
-  formal_assurance: z.literal("NOT_ESTABLISHED"), next_action: z.string().min(1).max(1500),
+  formal_assurance: z.enum(["NOT_ESTABLISHED", "SPEC_REVIEW_VERIFIED"]), next_action: z.string().min(1).max(1500),
   system_architecture:systemArchitectureSummarySchema.optional(),
 });
 export type DeliveryWorkflow = z.infer<typeof deliveryWorkflowSchema>;
@@ -35,7 +35,8 @@ export function unavailableDocumentReview(project: {project_id: string; model_ve
 }
 
 /** Workflow guidance only: no formal gate, approval or product decision is created. */
-export function documentDelivery(review: DocumentReviewSummary, packageValid?: boolean, readiness?: ReadinessEvaluation, architecture?:SystemArchitectureSummary): DeliveryWorkflow {
+export function documentDelivery(review: DocumentReviewSummary, packageValid?: boolean, readiness?: ReadinessEvaluation,
+  architecture?: SystemArchitectureSummary, verifiedSpecReview = false): DeliveryWorkflow {
   documentReviewSummarySchema.parse(review);
   const contentGaps = readiness && [...readiness.hard_gates, ...readiness.mode_gates]
     .some(g => (g.gate <= 12 || g.gate === 101 || g.gate === 102) && g.status === "FAIL");
@@ -65,8 +66,10 @@ export function documentDelivery(review: DocumentReviewSummary, packageValid?: b
   } else {
     stage = "READY_TO_EXPORT"; next = "当前版本规格校验通过，本轮没有需要用户决定或继续核验的复审事项。可请求精确导出授权，保留后续建议及正式保证限制。DreamKids 轻量预览按「确认输出开发文档」选项交付。输出校验过的 XSpec 后停止。";
   }
+  const formallyReviewed = verifiedSpecReview || readiness?.mode_gates.some(g => g.gate === 103 && g.status === "PASS");
   return {stage, document_review: review, package_valid: packageValid ?? null, review_optional: true,
-    formal_assurance: "NOT_ESTABLISHED", next_action: next,...(architecture?{system_architecture:architecture}:{})};
+    formal_assurance: formallyReviewed ? "SPEC_REVIEW_VERIFIED" : "NOT_ESTABLISHED",
+    next_action: next,...(architecture?{system_architecture:architecture}:{})};
 }
 
 export function documentDeliveryMarkdown(workflow: DeliveryWorkflow): string {
@@ -77,7 +80,9 @@ export function documentDeliveryMarkdown(workflow: DeliveryWorkflow): string {
     `- Reviewed/current Product Model version: ${r.reviewed_model_version ?? "None"}/${r.current_model_version}\n` +
     `- Native result source verified: ${r.source_verified}\n- Findings/questions/verification notes: ${r.finding_count}/${r.question_count}/${r.note_count}\n` +
     (triage ? `- Owner choices / verification / follow-up / confirmed rule reused: ${triage.owner_choices}/${triage.verification}/${triage.follow_up}/${triage.reused}\n` : "") +
-    `- Formal permission isolation: NOT VERIFIED. This document review is not formal audit certification.\n` +
+    (w.formal_assurance === "SPEC_REVIEW_VERIFIED"
+      ? "- Formal specification review: VERIFIED for the current snapshot.\n"
+      : "- Formal permission isolation: NOT VERIFIED. This document review is not formal audit certification.\n") +
     `- Review is optional; export approval remains separate. Findings are advice, not confirmed product decisions.\n` +
     `- The review covers its frozen readable design documents, not this subsequently generated delivery-status section.\n`;
 }

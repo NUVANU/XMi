@@ -63,6 +63,27 @@ function visibleFlow(draft: z.infer<typeof prototypeDraftSchema>) {
 const material = (project: Project) => project.items.filter(item =>
   item.type === "decision" && item.tags?.includes("material") &&
   !["CONFIRMED", "REJECTED", "SUPERSEDED"].includes(item.status));
+const hasFormalDesign = (project: Project) => !!(project.delivery_policy && project.delivery_policy.effective_mode !== "FAST_VALIDATION") ||
+  project.items.some(item => item.status === "CONFIRMED" && item.type !== "vision");
+
+export function defaultPrototypeDesignFlow(project: Project) {
+  return hasFormalDesign(project) || prototypeProjectBlockers(project).length ? "STANDARD" as const : "LIGHTWEIGHT" as const;
+}
+
+function prototypeProjectBlockers(project: Project, riskProjection = project): string[] {
+  const blockers: string[] = [];
+  if (project.lifecycle_state === "ARCHIVED" || project.profile === "unsupported" ||
+    (project.delivery_policy && project.delivery_policy.effective_mode !== "FAST_VALIDATION"))
+    blockers.push("这个项目需要沿用原有的规格流程。");
+  if (project.items.some(item => item.type === "risk" && !["REJECTED", "SUPERSEDED"].includes(item.status)) ||
+    evaluateRisk(riskProjection).findings.length) blockers.push("这个版本还有需要核实的项目风险。");
+  if (project.profile === "digital-game-v0" && project.items.some(item => !["REJECTED", "SUPERSEDED"].includes(item.status) && hasOnlineGameScope(item.statement)))
+    blockers.push("联机或多人玩法需要走对应的规格流程。");
+  if (project.items.some(item => item.status === "CONFIRMED" && item.type !== "vision"))
+    blockers.push("已有正式规格的项目继续使用原有的规格流程。");
+  if (project.open_questions.some(question => question.status === "BLOCKING")) blockers.push("还有已记录的关键选择需要回答。");
+  return blockers;
+}
 const privatePrototype = [
   {id: "local-preview", label: "第一版仅在本地浏览器供一人试玩或试用。"},
   {id: "sample-data", label: "只使用公开合成案例。"},
@@ -75,6 +96,11 @@ const privateGame = [
   {id: "no-account", label: "无账号，仅使用公开合成案例。"},
   {id: "no-payment", label: "原型全程免费。"},
   {id: "no-online", label: "原型全程离线，单人游玩。"},
+];
+const privateTool = [
+  ...privateGame.filter(item => item.id !== "no-online"),
+  {id: "tool-persistence", label: "需要保存的示例留在当前设备，其余输入只在当前会话使用。"},
+  {id: "tool-data-safety", label: "首版只处理公开合成示例，示例不含身份信息。"},
 ];
 const visualQuestion = {id: "presentation", question: "你想要哪种游戏画面？",
   options: [{id: "flat", label: "2D 平面"}, {id: "solid", label: "3D 立体"}, {id: "text", label: "纯文字"}]};
@@ -89,32 +115,24 @@ export function prototypePreview(project: Project, input: unknown, selectedChoic
   requireCondition(questions.length <= 6 && new Set(questions.map(question => question.id)).size === questions.length &&
     questions.every(question => new Set(question.options.map(option => option.id)).size === question.options.length &&
       new Set(question.options.map(option => option.label)).size === question.options.length), "PROTOTYPE_INVALID_QUESTIONS");
-  const blockers: string[] = [];
-  if (project.lifecycle_state === "ARCHIVED" || project.profile === "unsupported" ||
-    (project.delivery_policy && project.delivery_policy.effective_mode !== "FAST_VALIDATION"))
-    blockers.push("这个项目需要沿用原有的规格流程。");
   const source = project.items[0];
   const statements = [draft.goal, ...draft.first_version.flatMap(feature => [feature.show, feature.check]),
     ...draft.flow.steps.map(step => step.label), ...draft.flow.edges.flatMap(edge => edge.label ?? [])];
   const riskProjection = source ? {...project, items: [...project.items, ...statements
     .map((statement, i) => ({...source, id: "PROTOTYPE-DRAFT-" + i, type: "flow" as const, statement}))]} : project;
-  if (evaluateRisk(riskProjection).findings.length ||
-    project.items.some(item => item.type === "risk" && !["REJECTED", "SUPERSEDED"].includes(item.status)))
-    blockers.push("这个版本还有需要核实的项目风险。");
-  if (game && [source?.statement ?? "", ...statements].some(hasOnlineGameScope))
+  const blockers = prototypeProjectBlockers(project, riskProjection);
+  if (game && statements.some(hasOnlineGameScope))
     blockers.push("联机或多人玩法需要走对应的规格流程。");
-  if (material(project).length || project.open_questions.some(question => question.status === "BLOCKING"))
+  if (material(project).length)
     blockers.push("还有已记录的关键选择需要回答。");
-  if (project.items.some(item => item.status === "CONFIRMED" && item.type !== "vision"))
-    blockers.push("已有正式规格的项目继续使用原有的规格流程。");
   const snapshot = {format: "XMI-PROTOTYPE-PREVIEW/1" as const, project_id: project.project_id,
     model_version: project.model_version, title: project.title,
     original_idea: project.items.find(item => item.type === "vision" && item.status !== "REJECTED")?.statement ?? "",
     goal: draft.goal, first_version: [...new Map(draft.first_version.map(item => [fingerprint(item), item])).values()],
     ...(game && draft.presentation ? {presentation: draft.presentation} : {}),
     flow_title: game ? "游戏流程图" as const : "使用流程图" as const,
-    flow: visibleFlow(draft), questions, selected_choices: selectedChoices, blockers,
-    defaults: game ? [...privatePrototype, ...privateGame] : privatePrototype,
+    flow: visibleFlow(draft), questions, selected_choices: selectedChoices, blockers: [...new Set(blockers)],
+    defaults: [...privatePrototype, ...(game ? privateGame : privateTool)],
     export_enabled: questions.length === 0 && blockers.length === 0};
   return prototypePreviewSchema.parse({...snapshot, snapshot_id: fingerprint(snapshot)});
 }

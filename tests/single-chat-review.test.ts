@@ -138,7 +138,7 @@ test("blueprint link bounds agree across MCP input, output and native review met
   }
 });
 
-test("24 unique blueprint links survive resume, native proposal save and separate stale-checked adoption", async t => {
+test("24 blueprint links survive automatic draft saving and one stale-checked native adoption", async t => {
   const f=fixture(t), seeded=seedBlueprint(f,3);
   assert.equal(seeded.candidate.links!.length,24);
   const server=createXmiServer(f.service,{singleReview:f.router});
@@ -153,14 +153,13 @@ test("24 unique blueprint links survive resume, native proposal save and separat
   assert.deepEqual(candidate.links,seeded.candidate.links);
   const request={operation:"xmi_patch_apply",schema_version:"0.1.0",project_id:seeded.project.project_id,expected_version:seeded.project.model_version,
     idempotency_key:"save-plan-24",patch:{kind:"ADD_CANDIDATE",candidate}};
-  const prepared=await client.callTool({name:"xmi_item_review_prepare",arguments:{schema_version:"0.1.0",session_id:session,request}});
-  assert.equal(outputs.xmi_item_review_prepare.safeParse(prepared.structuredContent).success,true);
-  const review=prepared.structuredContent as {ok:boolean;data:{review_text:string}};
-  assert.equal(review.ok,true);
-  assert.ok(review.data.review_text.includes(quotedReviewText(candidate.links!.join("、"))));
-  assert.throws(()=>f.commit(),/NATIVE_OWNER_REPLY_REQUIRED/);
+  const oldRoute=await client.callTool({name:"xmi_item_review_prepare",arguments:{schema_version:"0.1.0",session_id:session,request}});
+  assert.equal((oldRoute.structuredContent as {error:{code:string}}).error.code,"BLUEPRINT_DRAFT_AUTO_SAVE_REQUIRED");
   assert.equal(f.service.get(seeded.project.project_id).model_version,seeded.project.model_version);
-  f.display(review.data.review_text);f.prompt("确认好了");f.commit();
+  const input={...request};
+  Reflect.deleteProperty(input,"operation");
+  const proposal=await client.callTool({name:"xmi_patch_apply",arguments:input});
+  assert.equal((proposal.structuredContent as {ok:boolean}).ok,true);
   let p=f.service.get(seeded.project.project_id), saved=p.items.find(item=>item.id===candidate.id)!;
   assert.equal(saved.status,"PROPOSED");assert.equal(saved.blueprint_detail!.owner_disposition,null);
   assert.deepEqual(saved.links,candidate.links);
@@ -270,19 +269,23 @@ test("one native reply cannot approve both a module and a single-item list", t =
   assert.equal(f.service.get(p.project_id).model_version,p.model_version);
 });
 
-test("technical proposal saving and adoption are distinct exact native actions, never popup forms", t => {
+test("automatic blueprint draft carries agent provenance and adoption still needs a native reply", async t => {
   const f=fixture(t), seeded=seedBlueprint(f);
   const request={operation:"xmi_patch_apply",schema_version:"0.1.0",project_id:seeded.project.project_id,expected_version:seeded.project.model_version,
     idempotency_key:"save-plan",patch:{kind:"ADD_CANDIDATE",candidate:seeded.candidate}};
-  const prepared=f.router.prepare(seeded.project,request,session);
-  assert.match(prepared.review_text,/这次不会批准采用/);
-  assert.doesNotMatch(prepared.review_text,/"blueprint_detail"|"source_refs"|"owner_action"/);
-  assert.ok(prepared.review_text.includes(seeded.candidate.blueprint_detail!.deployment_topology));
-  assert.ok(prepared.review_text.includes(quotedReviewText(seeded.candidate.blueprint_detail!.production_gaps[0]!)));
-  f.display(prepared.review_text); assert.match(f.prompt("确认好了"),/尚未正式写入/); f.commit();
+  assert.throws(()=>f.router.prepare(seeded.project,request,session),/BLUEPRINT_DRAFT_AUTO_SAVE_REQUIRED/);
+  const server=createXmiServer(f.service,{singleReview:f.router});
+  const client=new Client({name:"blueprint-autosave",version:"1"});
+  const [a,b]=InMemoryTransport.createLinkedPair(); await server.connect(a); await client.connect(b);
+  t.after(async()=>{await client.close();await server.close();});
+  const input={...request};
+  Reflect.deleteProperty(input,"operation");
+  const result=await client.callTool({name:"xmi_patch_apply",arguments:input});
+  assert.equal((result.structuredContent as {ok:boolean}).ok,true);
   let p=f.service.get(seeded.project.project_id), item=p.items.find(item=>item.id===seeded.candidate.id)!;
   assert.equal(item.status,"PROPOSED"); assert.equal(item.blueprint_detail!.owner_disposition,null);
-  assert.match(item.source_refs.at(-1)!.ref,/^codex-user-prompt:/);
+  assert.equal(f.service.history(p.project_id).at(-1)?.actor,"agent");
+  assert.ok(!item.source_refs.some(ref=>ref.type==="owner_action"));
   const approval=f.router.prepare(p,{...f.args(p,item.id),solution_disposition:"APPROVE_BLUEPRINT"},session);
   assert.match(approval.review_text,/批准采用这份技术方案/);
   f.display(approval.review_text); assert.match(f.prompt("确认好了"),/尚未正式写入/); f.commit();

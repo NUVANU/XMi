@@ -2,7 +2,7 @@ import { openSync, closeSync, fstatSync, readSync, realpathSync } from "node:fs"
 import { relative, isAbsolute } from "node:path";
 import { createHash } from "node:crypto";
 type DisplayBinding = {session_id: string; review_text_hash: string; review_text_length: number;
-  review?: {module: string}; review_heading?: string};
+  review?: {module: string}; review_heading?: string; entire_final?: true};
 
 // Transcript format is not a platform contract. Only these observed final phases are accepted;
 // an unsupported/partial log fails closed instead of guessing what the Owner saw.
@@ -68,6 +68,8 @@ export function checkReviewDisplay(path: string | null | undefined, sessionDirec
       }
     }
     if (!lastFinal) return result("NO_CURRENT_FINAL");
+    if (pending.entire_final) return result(createHash("sha256").update(lastFinal.trimEnd()).digest("hex") === pending.review_text_hash
+      ? "MATCH" : "REVIEW_DIGEST_MISMATCH");
     const heading = pending.review_heading ?? (pending.review ? "## " + pending.review.module + "：模块确认清单\n" : undefined);
     if (!heading) return result("REVIEW_NOT_IN_FINAL");
     const start = lastFinal.indexOf(heading);

@@ -32,7 +32,9 @@ for (const [profile, draft, title] of [["digital-game-v0", gameDraft, "游戏流
   ["web-micro-saas-v0", toolDraft, "使用流程图"]] as const) {
   test(title + " and one chat choice return a validated standard XSpec, without changing the source project", () => {
     const {project, service, session} = fixture(profile, draft.goal);
-    const preview = session.show(prototypePreview(project, draft));
+    const entry = session.startDesign(draft);
+    assert.equal(entry.route, "LIGHTWEIGHT");
+    const preview = entry.preview!;
     assert.equal(preview.flow_title, title);
     assert.equal(preview.export_enabled, true);
     assert.equal(preview.flow.edges.length, profile === "digital-game-v0" ? 4 : 1);
@@ -74,6 +76,7 @@ test("collect experience choices together, re-render once, refuse old snapshots 
   assert.equal(session.selectOption(after.snapshot_id, "我想改一点").action, "REVISE_DESIGN");
   assert.throws(() => session.selectOption(after.snapshot_id, "2"), /PROTOTYPE_PREVIEW_CHANGED/);
   const publicProject = fixture("digital-game-v0", "用户通过真实支付购买道具和订阅。");
+  assert.equal(publicProject.session.startDesign(gameDraft).route, "STANDARD");
   const unsafe = publicProject.session.show(prototypePreview(publicProject.project, gameDraft));
   assert.equal(unsafe.export_enabled, false);
   assert.throws(() => publicProject.session.selectOption(unsafe.snapshot_id, "2"), /PROTOTYPE_CHOICES_PENDING/);
@@ -151,12 +154,14 @@ test("a draft with cross-device shared play cannot use the private single-player
   assert.throws(() => session.selectOption(preview.snapshot_id, "2"), /PROTOTYPE_CHOICES_PENDING/);
 });
 
-test("configured export refuses an intrinsically valid but not-ready prototype", t => {
+test("a private tool publishes after one choice with explicit account, cost and data boundaries", t => {
   const {project} = fixture("web-micro-saas-v0", toolDraft.goal);
   const directory = mkdtempSync(join(tmpdir(), "xmi-dreamkids-unready-"));
   t.after(() => rmSync(directory, {recursive: true, force: true}));
   const session = new DreamKidsDocumentSession(project.project_id, () => project, {outputDirectory: directory});
   const preview = session.show(prototypePreview(project, toolDraft));
-  assert.throws(() => session.selectOption(preview.snapshot_id, "确认输出开发文档"), /XSPEC_PROTOTYPE_NOT_READY/);
-  assert.equal(readdirSync(directory, {withFileTypes: true}).some(entry => entry.isDirectory()), false);
+  const result = session.selectOption(preview.snapshot_id, "确认输出开发文档");
+  assert.equal(result.action, "DOCUMENT_READY");
+  assert.ok(result.validation.readiness_evaluation.hard_gate_ready);
+  assert.equal(result.validation.consumers.xdev.accepted, true);
 });

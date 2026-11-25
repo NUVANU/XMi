@@ -1,77 +1,17 @@
-# XMi
+# XMi documentation / 文档入口
 
-新建本地项目时，以用户核实的项目根目录作为默认保存位置（可修改）。设计数据库与可读过程资料随项目保存在 `.xmi/`，其他 agent 从 `XMI-START-HERE.md` 读取版本、设计、决定和待办。正式 XSpec 导出到项目的 `docs/xspec/`。已有共享库项目保持原位，不自动迁移；资料文件编辑不代表产品确认。版本更新后须重连 XMi 才能让已打开的连接加载新代码。
+[English README](https://github.com/NUVANU/XMi/blob/main/README.md) · [简体中文介绍](https://github.com/NUVANU/XMi/blob/main/README.zh-CN.md)
 
-Codex 本地流程沿用宿主已有模型能力进行独立内容评审；需求与同版顶层架构一起评审，只返回具体问题与建议。它不等于正式保证或实现验收，不要求配置额外供应商。一般宿主未提供此能力时如实报告不可用。
+Current public source / 当前公开源码：**V0.1.4**.
 
-未达到正式保证的有效规格可经授权导出为 NOT_READY 候选包，清楚保留未完成项；不代表生产就绪。历史边界说明见 ADR-021、ADR-022，当前流程见 [工作流](docs/public/WORKFLOW.md)。
+- [Install / 安装与升级](INSTALL.md)
+- [Latest update / 最新更新与验证范围](UPDATE-20261125.md)
+- [Workflow / 使用流程](WORKFLOW.md)
+- [Architecture / 技术结构](ARCHITECTURE.md)
+- [Known issues / 已知问题](KNOWN-ISSUES.md)
+- [Platform evidence / 平台验证范围](PLATFORMS.md)
+- [DOCX dependency / DOCX 依赖](DOCX-DEPENDENCY.md)
+- [Security / 安全说明](../../SECURITY.md)
+- [Contribute / 参与贡献](../../CONTRIBUTING.md)
 
-**通过模块访谈，把产品想法梳理成准确、可追溯、可交接开发的 XSpec。**
-
-当前版本：**V0.1.2**（软件包版本 `0.1.2`；实际验收和发布状态见发行目录中的 RELEASE-MANIFEST.json）。支持网页、SaaS、工具和电子游戏的产品定义；交付的是开发规格，开发执行由开发者或 XDev 负责。
-
-## 使用效果
-
-从一句想法或一套原有设计文档开始。XMi 围绕一个模块展示当前设定、规则表、关联背景、待定问题和建议，逐轮讨论清楚，再进入下一个模块。
-
-例如：“我想做一个多人预约工具。”讨论预约模块时，会一起呈现时段容量、取消规则、冲突处理、权限和失败反馈。未知内容保留为待定项，建议可以修改，正式采用由你确认。
-
-- 导入 Markdown、TXT、DOCX、PDF，提取有来源的待核对条目。
-- 梳理术语、歧义、冲突、范围、数据、权限和验收条件。
-- 根据已确认约束比较技术方案；涉及成本、隐私和产品行为的决定由你确认。
-- 产品状态保存到本地 SQLite，可按项目 ID 跨对话恢复。
-- 审计缺口、编译和验证 XSpec；高分不会覆盖阻塞项。
-
-## 快速开始
-
-准备 Node **24.20.0**、npm **11.19.0**。轻量包不附 Node 或 node_modules，首次安装需要联网。已审查的 DOCX API 源码与浏览器产物随源码提供，其来源、组件和许可证见 [DOCX 依赖说明](docs/public/DOCX-DEPENDENCY.md)。
-
-```sh
-npm ci --omit=dev --ignore-scripts
-npm run check
-```
-
-自检只操作独立临时测试数据，模拟 MCP 表单；PASS 不等于宿主界面已验收。
-
-| 宿主 | 配置命令 | 确认机制 |
-| --- | --- | --- |
-| Codex 本机 | `npm run configure -- --host codex --data-dir <本地绝对目录>` | 信任原生钩子后，完整清单展示、真实回复、受控提交与回读 |
-| WorkBuddy | `npm run configure -- --host workbuddy --data-dir <本地绝对目录>` | 通用 MCP；正式采用依赖宿主的 MCP 确认表单 |
-
-将路径换成你自己选择、位于 XMi 安装目录外的目录；路径有空格时加引号。工具拒绝覆盖已有配置或数据库。生成结果位于 `.xmi-install/<宿主>/`，通过宿主支持的入口导入并完成信任；生成配置不等于已连接。[完整安装指南](docs/public/INSTALL.md)
-
-开始对话：
-
-> 启用 XMi，帮我把产品想法按模块讨论。先展示当前设定、关联背景、待定项和建议，一起讨论清楚后整理成 XSpec。
-
-继续项目时提供原项目 ID，沿用原数据库配置。
-
-## 平台与数据
-
-Codex 原生模块确认已有一次真实的 16 项成功回读；所有异常恢复和并发情形尚未完成宿主验收。WorkBuddy 实际安装、表单能力及完整访谈待社区测试。遇到 CONSENT_UNAVAILABLE，应保留讨论并反馈，不能声称正式确认成功。[平台范围](docs/public/PLATFORMS.md)
-
-ChatGPT 手机端不能安装此本地 STDIO 包；本次公开源码不附私人云端服务。XMem 可选，使用 XMi 不要求安装它。
-
-提案与正式确认分开，确认保留来源。导入文件由用户保管，XMi 保留提取条目、来源位置和文件摘要；宿主及模型的数据处理设置另行适用。包内不含作者的真实项目、私人聊天、数据库、密钥或机器配置。[隐私与安全](SECURITY.md)
-
-## 开发与反馈
-
-```sh
-npm ci --ignore-scripts
-npm run lint
-npm run build
-npm test
-npm run check
-```
-
-[架构概览](docs/public/ARCHITECTURE.md) · [贡献指南](CONTRIBUTING.md) · [更新记录](CHANGELOG.md)
-
-报告问题请包含版本、宿主、步骤和脱敏错误码，不要上传密钥、真实设计文件或数据库。社区版源码包不包含作者本机 Git 历史和私人试用证据。早期设计/工程文档为历史参考，当前行为以源码、测试和发行说明为准。[已知问题](docs/public/KNOWN-ISSUES.md)包括风险范围误匹配及混合条目排除语义；不能用批量排除绕过。独立审查及真实 XUi/XDev 消费端验收仍有未完成项，生产环境使用前应按目标宿主验证。
-
-许可证：[Apache-2.0](LICENSE)。项目：[NUVANU/XMi](https://github.com/NUVANU/XMi)。
-
-## V0.1.2 确认与架构流程
-
-初次方案清单确认后，XMi 自动生成或更新24章顶层系统架构文档，进行本地校验，再使用已有宿主能力独立评审需求和架构。只把新问题及建议集中交给用户处理；明确的处理回复本身就是确认。只改一项时，只列待处理的这一项，沿用其他已确认内容。过程、报告和文档不再追加确认；无产品变化时沿用当前评审。真正的产品修改校验通过后，独审当前新版本一次。导出仍须针对确切包另行授权。
-
-默认回复“确认”，旧回复保持兼容；带修改、条件或不完整的回复不构成全部同意。架构生成不创造产品批准，也不把待定设计或未执行验收写成完成。详见 [工作流](docs/public/WORKFLOW.md)。
+[Latest source ZIP / 最新源码](https://github.com/NUVANU/XMi/archive/refs/heads/main.zip). The fixed [v0.1.3 Release](https://github.com/NUVANU/XMi/releases/tag/v0.1.3) is older and does not include V0.1.4. 固定发行包仍为旧版，本次更新源码与文档。

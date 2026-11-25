@@ -6,10 +6,12 @@ import { checkReviewDisplay } from "./display-check.ts";
 import { readSingle, clearReviewCommands, reviewCommandsHash, handledCommands } from "./single.ts";
 import {parseIssueReply,issueHandlingSummary} from "../../packages/core/issue-handling.ts";
 import { designScopeContext, isDesignScopeExit } from "./design-scope.ts";
+import { consumeCompactionContext } from "./compaction.ts";
+import { processPrototypePrompt } from "./prototype.ts";
 
 const eventSchema = z.object({hook_event_name: z.literal("UserPromptSubmit"),
   session_id: z.string().regex(sessionPattern), turn_id: z.string().regex(sessionPattern),
-  prompt: z.string().max(1024 * 1024), transcript_path: z.string().nullable().optional()});
+  prompt: z.string().max(1024 * 1024), transcript_path: z.string().nullable().optional(), cwd: z.string().max(1000).optional()});
 export const moduleReviewDirectory = () => codexReviewPaths().reviews;
 
 // Only the plugin's native UserPromptSubmit command invokes this against real data.
@@ -30,11 +32,16 @@ function processLockedPrompt(event: z.infer<typeof eventSchema>, directory: stri
   const pending = readPending(directory, event.session_id);
   const single = readSingle(directory, event.session_id);
   const scope = designScopeContext(event, directory, pending?.session_id === event.session_id || single?.session_id === event.session_id);
+  const prototype = processPrototypePrompt(directory, sessionDirectory, event);
   const review = processReviewPrompt(event, directory, sessionDirectory, pending, single);
   // The genuine exit still revokes outstanding review grants above, but must
   // not ask the user to regenerate an XMi list after choosing another task.
-  if (isDesignScopeExit(event.prompt)) return scope;
-  return [scope, review].filter(Boolean).join("\n");
+  if (isDesignScopeExit(event.prompt)) {
+    consumeCompactionContext(directory, event.session_id, event.cwd, true);
+    return scope;
+  }
+  const resume = scope ? consumeCompactionContext(directory, event.session_id, event.cwd) : "";
+  return [scope, resume, review, prototype].filter(Boolean).join("\n");
 }
 function processReviewPrompt(event: z.infer<typeof eventSchema>, directory: string, sessionDirectory: string,
   pending: ReturnType<typeof readPending>, single: ReturnType<typeof readSingle>) {

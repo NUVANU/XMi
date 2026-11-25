@@ -5,6 +5,7 @@ import {evaluateRisk, exclusionScopeIssues} from "../../packages/core/completene
 import {requireCondition} from "../../packages/core/errors.ts";
 import {quotedReviewText as quote} from "./blueprint-review.ts";
 import type {policyReviewRequest} from "./contracts.ts";
+import {supersededSandboxes} from "../../packages/core/project-service.ts";
 
 const modes = {FAST_VALIDATION: "快速验证（原型目标）", FAST_DEVELOPMENT: "快速开发", PRODUCT_GRADE: "产品级规格"};
 const resolutions: Record<string, string> = {UPGRADE_SCOPE: "提升这些范围的规格深度", UPGRADE_PROJECT: "提升整个项目的交付模式",
@@ -13,7 +14,8 @@ const reasons: Record<string, string> = {AUTH_OR_PRIVATE_DATA: "身份、权限�
   SENSITIVE_DATA: "敏感资料", DESTRUCTIVE_ACTION: "不可逆与破坏性操作", ADMIN_ACCESS: "高权限访问",
   EXTERNAL_SIDE_EFFECT: "外部操作", REGULATED_OR_HIGH_CONSEQUENCE: "受监管或高后果行为"};
 
-export function policyReview(project: Project, request: z.infer<typeof policyReviewRequest>, source: SourceRef & {type: "owner_action"}) {
+export function policyReview(project: Project, request: z.infer<typeof policyReviewRequest>, source: SourceRef & {type: "owner_action"},
+  explicitRetractions?: ReadonlySet<string>) {
   requireCondition(project.project_id === request.project_id && project.model_version === request.expected_version, "VERSION_CONFLICT");
   const intro = ["项目：", quote(project.title), "当前交付模式：" + (project.delivery_policy ? modes[project.delivery_policy.effective_mode] : "尚未选择")];
   let command: Command, title: string, content: string[];
@@ -54,11 +56,18 @@ export function policyReview(project: Project, request: z.infer<typeof policyRev
       content.push("原处置：" + (resolutions[recorded!.resolution] ?? recorded!.resolution), "旧记录理由：", quote(recorded!.rationale),
         "本次撤回理由：", quote(request.reason), "生效结果：原处置保留在历史中并标记已撤回，风险返回待审；关联设计内容继续保留，后续导出移除这条旧处置。");
     } else {
+      const replaces = explicitRetractions ? supersededSandboxes(project, request.override_id, request.resolution)
+        .filter(id => !explicitRetractions.has(id)) : [];
       command = {kind: "MODE_OVERRIDE_RESOLVED", override_id: request.override_id, resolution: request.resolution,
-        rationale: request.rationale, owner_action: {intent: "RESOLVE_OVERRIDE", source_ref: source}};
+        rationale: request.rationale, owner_action: {intent: "RESOLVE_OVERRIDE", source_ref: source},
+        ...(replaces.length ? {replaces_override_ids: replaces} : {})};
       title = "我确认采用以上风险处置";
       content.push("本次处置：" + resolutions[request.resolution], "本次处理理由：", quote(request.rationale),
         request.resolution === "DEFER_OR_EXCLUDE" ? "生效范围：下面列出的整条设计内容将从本期交付排除；需要保留其中一部分时，请先修改和拆分。" : "生效范围：仅采用下面列出的风险处理方式；普通设定确认和最终交付就绪仍按各自规则审核。");
+      for (const id of replaces) {
+        const old = project.delivery_policy.risk_overrides.find(entry => entry.id === id)!;
+        content.push(`随本次一并撤回已由新范围覆盖的旧沙盒记录（${old.scope_ids.length} 项）；原记录保留在历史中。`, quote(id));
+      }
     }
     content.push("关联设计（完整内容）：", ...scope.scope_ids.flatMap((id, index) => {
       const item = project.items.find(entry => entry.id === id);

@@ -203,6 +203,13 @@ export const legacyConfirmationSchema = z.strictObject({
   confirmed_at: z.iso.datetime(), source_ref: sourceSchema.extend({type: z.literal("owner_action")}),
 });
 const overrideResolution = z.enum(["UPGRADE_SCOPE", "UPGRADE_PROJECT", "STUB_OR_SANDBOX", "DEFER_OR_EXCLUDE"]);
+export const acceptanceRequirementIds = z.array(z.string().min(3).max(100)).min(1).max(20)
+  .refine(ids => new Set(ids).size === ids.length, "Requirement IDs must be unique.");
+export const closingLinkRepairSchema = z.strictObject({item_id: z.string().min(3).max(100),
+  fingerprint: z.string().regex(/^[a-f0-9]{64}$/u),
+  basis: z.array(z.strictObject({requirement_id: z.string().min(3).max(100),
+    requirement_fingerprint: z.string().regex(/^[a-f0-9]{64}$/u),
+    criterion_quote: z.string().trim().min(8).max(1000), requirement_quote: z.string().trim().min(8).max(1000)})).min(1).max(20)});
 export const commandSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("PROJECT_CREATED"), title: z.string().min(1).max(200),
     idea: z.string().min(1).max(20000), profile: productProfileSchema.optional(), source_ref: sourceSchema }),
@@ -214,6 +221,13 @@ export const commandSchema = z.discriminatedUnion("kind", [
     reason: z.string().min(1).max(2000).optional() }),
   z.strictObject({kind:z.literal("ITEM_TEXT_REVISED"),item_id:z.string().min(3),fingerprint:z.string().regex(/^[a-f0-9]{64}$/),
     statement:z.string().trim().min(1).max(8000),owner_action:ownerAction("REVISE_TEXT")}),
+  z.strictObject({kind: z.literal("ACCEPTANCE_LINKS_ADDED"), item_id: z.string().min(3).max(100),
+    fingerprint: z.string().regex(/^[a-f0-9]{64}$/), requirement_ids: acceptanceRequirementIds,
+    owner_action: ownerAction("ADD_ACCEPTANCE_LINKS")}),
+  closingLinkRepairSchema.extend({kind: z.literal("ACCEPTANCE_LINKS_DERIVED")}),
+  z.strictObject({kind: z.literal("ACCEPTANCE_WORDING_REUSED"), item_id: z.string().min(3).max(100),
+    fingerprint: z.string().regex(/^[a-f0-9]{64}$/), requirement_id: z.string().min(3).max(100),
+    requirement_fingerprint: z.string().regex(/^[a-f0-9]{64}$/)}),
   z.strictObject({ kind: z.literal("DECISION_APPROVED"), item_id: z.string().min(3),
     fingerprint: z.string().regex(/^[a-f0-9]{64}$/), selected_option_id: z.string().min(1).max(100),
     owner_action: ownerAction("APPROVE_DECISION") }),
@@ -223,7 +237,9 @@ export const commandSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.enum(["DELIVERY_MODE_SELECTED", "DELIVERY_MODE_UPGRADED"]), mode: modeSchema,
     fingerprint: z.string().regex(/^[a-f0-9]{64}$/), reason: z.string().min(1).max(2000), owner_action: ownerConfirmation }),
   z.strictObject({ kind: z.literal("MODE_OVERRIDE_RESOLVED"), override_id: z.string().regex(/^MODE-OVERRIDE-[A-Z0-9-]+$/),
-    risk_revision: z.literal(2).optional(), resolution: overrideResolution, rationale: z.string().min(1).max(2000), owner_action: ownerAction("RESOLVE_OVERRIDE") }),
+    risk_revision: z.literal(2).optional(), resolution: overrideResolution, rationale: z.string().min(1).max(2000),
+    replaces_override_ids: z.array(z.string().regex(/^MODE-OVERRIDE-[A-Z0-9-]+$/)).min(1).max(50).optional(),
+    owner_action: ownerAction("RESOLVE_OVERRIDE") }),
   // F-9: an override has to stay withdrawable, otherwise a wrongly recorded resolution is permanent.
   // Withdrawal is a state change, never a deletion: the record and its resolution are preserved so
   // that the decision remains auditable and the underlying risk simply becomes unresolved again.

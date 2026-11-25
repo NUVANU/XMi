@@ -24,7 +24,9 @@ test("public configuration generates independent Codex and generic-host routes w
   const hooks=JSON.parse(readFileSync(join(record.plugin_directory,"hooks/hooks.json"),"utf8")).hooks;
   assert.ok(hooks.UserPromptSubmit[0].hooks[0].command.includes("on-user-prompt.mjs"));
   assert.ok(hooks.Stop[0].hooks[0].command.includes("on-stop.mjs"));
+  for (const phase of ["PreCompact", "PostCompact"]) assert.ok(hooks[phase][0].hooks[0].command.includes("on-compaction.mjs"));
   assert.ok(existsSync(join(record.plugin_directory,"hooks/on-stop.mjs")));
+  assert.ok(existsSync(join(record.plugin_directory,"hooks/on-compaction.mjs")));
   assert.deepEqual(JSON.parse(readFileSync(join(record.plugin_directory,".mcp.json"),"utf8")).mcpServers.xmi.env_vars,["CODEX_HOME"]);
   assert.equal(existsSync(record.database),false);
   const other=f.run("workbuddy",join(f.base,"other-data"));assert.equal(other.status,0,other.stderr);
@@ -54,6 +56,7 @@ test("public source preserves audited parser bytes while excluding personal stat
     'apps/dreamkids-prototype/design-card.css','apps/dreamkids-prototype/prototype-export.ts',
     'apps/dreamkids-prototype/flow-order.ts','apps/dreamkids-prototype/design-options.ts',
     'docs/NATIVE-REVIEW-DELIVERY-20261115.md','docs/DREAMKIDS-PROTOTYPE-DOCUMENT-20261122.md',
+    'apps/windows-formal-review/IsolatedLauncher.cs','apps/windows-formal-review/Worker.cs',
     'README.md','README.zh-CN.md','开始使用.txt','.gitignore'])assert.deepEqual(files.get(path),readFileSync(path),path);
   assert.match(files.get('.gitattributes')!.toString(),/^packages\/mammoth-api\/\*\* -text$/m);
   for(const [path,bytes] of files) {

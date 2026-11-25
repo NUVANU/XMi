@@ -10,8 +10,8 @@ import {ElicitRequestSchema} from "@modelcontextprotocol/sdk/types.js";
 import {DocumentReviewRunner} from "../apps/mcp-server/document-review.ts";
 import {createXmiServer} from "../apps/mcp-server/server.ts";
 import {inputs, outputs, metadata} from "../apps/mcp-server/contracts.ts";
-import {materialReadCommand} from "../apps/mcp-server/native-spec-review.ts";
-import {buildReviewTransport, reviewPagePath} from "../apps/mcp-server/review-transport.ts";
+import {documentPageCommand, missingDocumentPage, numberedDocumentPages} from "../apps/mcp-server/document-pages.ts";
+import {observeNativeReview} from "../apps/mcp-server/native-spec-review.ts";
 import {buildReviewBundle} from "../packages/core/spec-review-service.ts";
 import {assessDocumentFindings, collectDocumentReview, documentReviewFocus, documentReviewMaterial, documentReviewStatusSchema} from "../packages/core/document-review.ts";
 import {canonical} from "../packages/core/validation.ts";
@@ -21,6 +21,8 @@ import {documentDelivery, documentReviewSummarySchema, unavailableDocumentReview
 import {XSpecService} from "../packages/core/xspec-service.ts";
 import {saveIssueDispositions} from "../apps/local-module-review/issue-dispositions.ts";
 import {randomUUID} from "node:crypto";
+
+
 
 const session = "00000000-0000-4000-8000-000000000001", child = "00000000-0000-4000-8000-000000000002";
 const line = (v: unknown) => JSON.stringify(v) + "\n";
@@ -98,6 +100,15 @@ test("only grounded current acceptance choices enter Owner review; verification 
   assert.equal(assessDocumentFindings(project, [responseValue.findings[0]!], {acceptance_ids: []}).routed[0]!.delivery_action, "FOLLOW_UP");
 });
 
+test("a citation must occur on a read page as well as in the original same-version document", () => {
+  const p = reviewProject(), b = buildReviewBundle(p), raw = response(p);
+  const file = documentReviewMaterial(b).documents.find(doc => doc.content.includes("Save a note and reload it."))!;
+  const quoted = {file_path: file.path, quote: "Save a note and reload it."};
+  const value = {...raw, findings: [{...raw.findings[0], evidence: [quoted]}]};
+  assert.equal(collectDocumentReview(b, undefined, value, []).findings.length, 0);
+  assert.equal(collectDocumentReview(b, undefined, value, [{path: file.path, content: quoted.quote}]).findings.length, 1);
+});
+
 function fixture(t: TestContext) {
   const data = reviewProjectService(), root = mkdtempSync(join(tmpdir(), "xmi-document-review-"));
   const sessions = join(root, "sessions"), date = join(sessions, "2026", "10", "17"), native = join(root, "native"), directory = join(root, "review");
@@ -108,7 +119,9 @@ function fixture(t: TestContext) {
   const runner = new DocumentReviewRunner({directory, sessions, native});
   t.after(() => {runner.close(); data.store.close(); rmSync(root, {recursive: true, force: true});});
   const start = () => documentReviewStatusSchema.parse(runner.start(data.project, "one", session, () => data.service.get(data.project.project_id)));
-  function deliver(options: {badQuote?: boolean; partial?: boolean; clean?: boolean; advisoryOnly?: boolean} = {}) {
+  function deliver(options: {badQuote?: boolean; partial?: boolean; clean?: boolean; advisoryOnly?: boolean;
+    firstPage?: "RETRY" | "SKIP" | "SECOND_RETRY" | "OUTSIDE" | "WRONG_FILE_READ" | "UNLINKED";
+    repeatPage?: "SAME" | "ALTERED_NATIVE" | "ALTERED_DELIVERY" | "OUTSIDE" | "REUSED_CALL_ID"} = {}) {
     const prepared = start(), job = prepared.host_job!; assert.ok(job);
     const db = new SqliteSpecReviewStore(join(directory, "reviews.sqlite"));
     const saved = db.get(data.project.project_id, prepared.run_id!)!; db.close();
@@ -116,18 +129,31 @@ function fixture(t: TestContext) {
     if (options.clean) {value.findings = []; value.questions = [];}
     if (options.advisoryOnly) value.findings = value.findings.slice(1);
     if (options.badQuote) value.findings[0]!.evidence[0]!.quote = "not supplied";
-    const path = "/root/" + job.task_name, text = JSON.stringify(value), pages = buildReviewTransport(packet).pages;
+    const path = "/root/" + job.task_name, text = JSON.stringify(value), pages = numberedDocumentPages(JSON.parse(packet));
+    const workdir = host.material_path + ".pages";
+    const attempt = (callId: string, page: number, output: string, delivered = output, deliveredId = callId, cwd = workdir) => [
+      {type: "response_item", payload: {type: "custom_tool_call", namespace: "functions", name: "exec", call_id: callId}},
+      {type: "event_msg", payload: {type: "item_completed", item: {type: "CommandExecution", status: "completed", cwd,
+        exit_code: 0, command: ["pwsh", "-Command", documentPageCommand(page)], aggregated_output: output}}},
+      {type: "response_item", payload: {type: "custom_tool_call_output", call_id: deliveredId, output: [
+        {type: "input_text", text: "Script completed\nWall time 0.5 seconds\nOutput:\n"}, {type: "input_text", text: delivered}]}}
+    ];
+    const failure = missingDocumentPage(0);
+    const firstAttempt = attempt("miss-1", 0, options.firstPage === "WRONG_FILE_READ" ? pages[1]! : failure,
+      undefined, options.firstPage === "UNLINKED" ? "other-call" : "miss-1", options.firstPage === "OUTSIDE" ? root : workdir);
+    const repeatedPage = options.repeatPage ? attempt(options.repeatPage === "REUSED_CALL_ID" ? "read-0" : "repeat-0",
+      2, options.repeatPage === "ALTERED_NATIVE" ? "changed" : pages[1]!,
+      options.repeatPage === "ALTERED_DELIVERY" ? "changed" : pages[1]!, undefined,
+      options.repeatPage === "OUTSIDE" ? root : workdir) : [];
     writeFileSync(childLog, [
       {type: "session_meta", payload: {id: child, parent_thread_id: session, thread_source: "subagent",
         source: {subagent: {thread_spawn: {parent_thread_id: session, agent_path: path}}}}},
-      ...pages.flatMap((page, i) => [
-        {type: "response_item", payload: {type: "custom_tool_call", namespace: "functions", name: "exec", call_id: `read-${i}`}},
-        {type: "event_msg", payload: {type: "item_completed", item: {type: "CommandExecution", status: "completed",
-          command: ["pwsh", "-Command", materialReadCommand(reviewPagePath(host.material_path, i))], aggregated_output: page + "\n"}}},
-        {type: "response_item", payload: {type: "custom_tool_call_output", call_id: `read-${i}`, output: [
-          {type: "input_text", text: "Script completed\nWall time 0.5 seconds\nOutput:\n"},
-          {type: "input_text", text: options.partial ? page.slice(0, 20) : page}]}}
-      ]),
+      ...attempt("read-index", 1, pages[0]!, options.partial ? pages[0]!.slice(0, 20) : pages[0]),
+      ...(options.firstPage ? firstAttempt : []),
+      ...(options.firstPage === "SECOND_RETRY" ? attempt("miss-2", 0, failure) : []),
+      ...pages.slice(1).flatMap((page, i) => options.firstPage === "SKIP" && i === 0 ? [] :
+        attempt(`read-${i}`, i + 2, page + "\n", page)),
+      ...repeatedPage,
       // No context-token ledger is needed to return grounded document advice.
       {type: "response_item", payload: {type: "message", role: "assistant", phase: "final_answer", content: [{type: "output_text", text}]}}
     ].map(line).join(""));
@@ -141,13 +167,13 @@ function fixture(t: TestContext) {
     ].map(line).join(""));
     return {prepared, host, packet};
   }
-  return {...data, runner, directory, native, start, deliver};
+  return {...data, runner, directory, native, sessions, start, deliver};
 }
 
 test("default document runner collects actual-source fixtures once, preserves advisory priority and canonical state", t => {
   const f = fixture(t), before = canonical(f.project), events = f.service.history(f.project.project_id), {prepared, packet} = f.deliver();
-  const input = JSON.parse(packet); assert.equal(input.schema_version, "XMI-DOCUMENT-REVIEW-PACKET/1"); assert.equal("model" in input, false);
-  assert.equal(input.documents.length, 14); assert.equal("covered_ids" in input.response_schema.properties, false);
+  const input = JSON.parse(JSON.parse(packet).introduction); assert.equal(input.schema_version, "XMI-DOCUMENT-REVIEW-INDEX/1");
+  assert.equal("model" in input, false); assert.ok(input.sources.length >= 14); assert.equal("covered_ids" in input.response_schema.properties, false);
   assert.equal(f.runner.status(f.project, prepared.run_id!, session).state, "RUNNING", "status does not commit");
   const done = f.start(); assert.equal(done.state, "COMPLETED"); assert.equal(done.source_verified, true);
   assert.equal(done.total_findings, 2); assert.equal(done.findings[0]!.severity, "BLOCKING"); assert.equal(done.gate_eligible, false);
@@ -164,6 +190,64 @@ test("one ungrounded opinion leaves the other native opinion available with a no
   const f = fixture(t); f.deliver({badQuote: true}); const done = f.start();
   assert.equal(done.state, "COMPLETED"); assert.equal(done.total_findings, 1); assert.equal(done.findings[0]!.id, "DOC-2");
   assert.ok(done.notes.some(n => n.includes("引用未能")));
+});
+
+test("a literal page typo can be corrected once by the same reviewer without product confirmation or M8 evidence", t => {
+  const f = fixture(t), before = f.service.history(f.project.project_id), {prepared} = f.deliver({firstPage: "RETRY"});
+  assert.match(prepared.host_job!.message, /correct that number once/);
+  const done = f.start();
+  assert.equal(done.state, "COMPLETED");
+  assert.equal(done.source_verified, true);
+  assert.equal(done.gate_eligible, false);
+  const repeated = f.runner.start(f.project, "other-key", session, () => f.service.get(f.project.project_id));
+  assert.equal(repeated.run_id, done.run_id);
+  assert.equal(repeated.host_job, null);
+  assert.deepEqual(f.service.history(f.project.project_id), before);
+});
+
+test("an identical native page reread preserves the advisory result without counting as extra coverage", t => {
+  const f = fixture(t);
+  const {host, packet} = f.deliver({repeatPage: "SAME"});
+  const native = observeNativeReview(f.sessions, host, packet);
+  assert.ok(native.state === "COMPLETED");
+  assert.equal(native.observedPages?.length, numberedDocumentPages(JSON.parse(packet)).length);
+  const done = f.start();
+  assert.equal(done.state, "COMPLETED");
+  assert.equal(done.source_verified, true);
+  assert.equal(done.gate_eligible, false);
+});
+
+test("a repeated page still needs authentic bytes and a unique, correctly scoped tool call", async t => {
+  for (const mode of ["ALTERED_NATIVE", "ALTERED_DELIVERY", "OUTSIDE", "REUSED_CALL_ID"] as const) {
+    await t.test(mode, st => {
+      const f = fixture(st); f.deliver({repeatPage: mode});
+      const result = f.start();
+      assert.ok(["INCOMPLETE", "UNVERIFIED"].includes(result.state));
+      assert.equal(result.source_verified, false);
+      assert.equal(result.gate_eligible, false);
+    });
+  }
+});
+
+test("a second session reuses a prepared version without claiming the reviewer has launched", t => {
+  const f = fixture(t), prepared = f.start();
+  writeFileSync(join(f.native, child + ".host.json"), line({session_id: child, event: "UserPromptSubmit"}));
+  const repeated = f.runner.start(f.project, "second-session", child, () => f.service.get(f.project.project_id));
+  assert.equal(repeated.run_id, prepared.run_id);
+  assert.equal(repeated.state, "AWAITING_AGENT");
+  assert.equal(repeated.host_job, null);
+});
+
+test("a failed read cannot substitute for the page, justify extra retries or permit another path to return content", async t => {
+  for (const mode of ["SKIP", "SECOND_RETRY", "OUTSIDE", "WRONG_FILE_READ", "UNLINKED"] as const) {
+    await t.test(mode, st => {
+      const f = fixture(st); f.deliver({firstPage: mode});
+      const result = f.start();
+      assert.ok(["INCOMPLETE", "UNVERIFIED"].includes(result.state));
+      assert.equal(result.source_verified, false);
+      assert.equal(result.gate_eligible, false);
+    });
+  }
 });
 
 test("incomplete native delivery and changed packet cannot be committed as document advice", t => {

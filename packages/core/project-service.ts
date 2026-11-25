@@ -6,7 +6,7 @@ import type { ProjectStore, StoreTransaction } from "../storage/store.ts";
 import { DomainError, requireCondition } from "./errors.ts";
 import { fingerprint, itemFingerprint, modeFingerprint, validateProject, rejectSecrets } from "./validation.ts";
 import { evaluateRisk, evaluateRiskLegacy, exclusionScopeIssues, riskResolutionRevision, invalidRiskOverrides } from "./completeness-service.ts";
-import { assessFeasibility } from "./solution-feasibility.ts";
+import { assessFeasibility, confirmedSolutionInputs } from "./solution-feasibility.ts";
 import { recommendSolutions, solutionBlockingInputs } from "./solution-options.ts";
 import { moduleConfirmationSchema } from "./module-confirmation.ts";
 import {actionConfirmationSchema, ownerReviewCommandSchema} from "./action-confirmation.ts";
@@ -19,6 +19,7 @@ const requestSchema = z.strictObject({
   project_id: z.string().regex(/^XMI-[A-Z0-9-]+$/), expected_version: z.number().int().nonnegative(),
   idempotency_key: z.string().min(1).max(200), command: commandSchema,
 });
+export type ClosingLinkRepair = Pick<Extract<Command, {kind: "ACCEPTANCE_LINKS_DERIVED"}>, "item_id" | "fingerprint" | "basis">;
 
 function currentBlueprint(project: Project) {
   return project.items.findLast(item => item.type === "solution_blueprint" &&
@@ -41,27 +42,45 @@ const changesSolution = (text: string) => reversal.test(text.toLowerCase()) || s
 export function planBlueprintRefresh(before: Project, next: Project, commands: Command[]): Command | undefined {
   const blueprint = currentBlueprint(before), detail = blueprint?.blueprint_detail;
   if (blueprint?.status !== "CONFIRMED" || !detail?.owner_disposition ||
-    detail.feasibility_fingerprint !== assessFeasibility(before).fingerprint ||
-    !commands.every(command => command.kind === "ITEM_TEXT_REVISED")) return;
+    detail.feasibility_fingerprint !== assessFeasibility(before).fingerprint) return;
+  const acceptanceAmendment = commands.some(command => command.kind === "ACCEPTANCE_LINKS_ADDED");
   let rewrote = false;
   const basis = commands.map(command => {
+    if (command.kind !== "ITEM_TEXT_REVISED" && command.kind !== "ACCEPTANCE_LINKS_ADDED" &&
+      command.kind !== "ITEM_CONFIRMED") return;
     const old = before.items.find(item => item.id === command.item_id);
     const updated = next.items.find(item => item.id === command.item_id);
+    if (acceptanceAmendment) {
+      if (old?.type !== "acceptance_criterion" || updated?.status !== "CONFIRMED") return;
+      if (command.kind === "ACCEPTANCE_LINKS_ADDED" && old.status === "CONFIRMED") {
+        return {id: updated.id, version: updated.version};
+      }
+      if (command.kind === "ITEM_CONFIRMED" && old.status === "PROPOSED" && !old.supersedes && old.links?.length &&
+        old.links.every(id => before.items.some(requirement => requirement.id === id &&
+          requirement.type === "functional_requirement" && requirement.status === "CONFIRMED" &&
+          requirement.statement === old.statement))) return {id: updated.id, version: updated.version};
+      return;
+    }
+    if (command.kind !== "ITEM_TEXT_REVISED") return;
     if (old?.status !== "CONFIRMED" || !updated || ![
-      "functional_requirement", "acceptance_criterion", "non_functional_requirement", "integration", "solution_constraint",
+      "functional_requirement", "acceptance_criterion", "non_functional_requirement", "integration", "solution_constraint", "constraint",
     ].includes(old.type)) return;
     const appended = updated.statement.startsWith(old.statement + " ");
     if (appended) {
       const addition = updated.statement.slice(old.statement.length);
-      if (changesSolution(addition)) return;
+      if (old.type === "constraint" || changesSolution(addition)) return;
     } else {
       const prior = new Set(clauses(old.statement)), current = clauses(updated.statement);
       const added = current.filter(clause => !prior.has(clause));
       const currentSet = new Set(current);
       const removed = [...prior].filter(clause => !currentSet.has(clause));
+      const inheritedConstraint = old.type === "constraint" && added.length === 1 && removed.length === 1 &&
+        before.items.some(item => item.type === "functional_requirement" && item.status === "CONFIRMED" &&
+          item.source_refs.some(source => source.type === "owner_action" && source.ref === command.owner_action.source_ref.ref) &&
+          clauses(item.statement).includes(added[0]!));
       // Do not carry forward a wholesale replacement or a change to a technical
       // constraint. The anchored text and explicit change checks serve different purposes.
-      if (!["functional_requirement", "acceptance_criterion", "integration"].includes(old.type) ||
+      if ((!["functional_requirement", "acceptance_criterion", "integration"].includes(old.type) && !inheritedConstraint) ||
         !current.some(clause => prior.has(clause)) || !added.length || added.some(changesSolution) ||
         fingerprint(architectureTerms(removed.join("\n"))) !== fingerprint(architectureTerms(added.join("\n")))) return;
       rewrote = true;
@@ -72,7 +91,7 @@ export function planBlueprintRefresh(before: Project, next: Project, commands: C
     fingerprint(recommendSolutions(before)) !== fingerprint(recommendSolutions(next))) return;
   const assessment = assessFeasibility(next);
   const risk = evaluateRisk(next);
-  if (rewrote && fingerprint(risk.findings) !== fingerprint(evaluateRisk(before).findings)) return;
+  if ((rewrote || acceptanceAmendment) && fingerprint(risk.findings) !== fingerprint(evaluateRisk(before).findings)) return;
   if (!assessment.ready || assessment.fingerprint === detail.feasibility_fingerprint ||
     solutionBlockingInputs(next).length || risk.unresolved_blocker_count ||
     invalidRiskOverrides(next).length || refreshedLinks(blueprint, assessment).length > 160) return;
@@ -82,6 +101,143 @@ export function planBlueprintRefresh(before: Project, next: Project, commands: C
 
 function refreshedLinks(blueprint: Item, assessment: ReturnType<typeof assessFeasibility>) {
   return [...new Set([...(blueprint.links ?? []), ...assessment.inputs.flatMap(input => input.evidence_ids)])];
+}
+
+function approvedScopeExpansions(before: Project, next: Project, events: DomainEvent[]): boolean {
+  if (!before.delivery_policy || !next.delivery_policy) return false;
+  const {risk_overrides: oldRows, ...previousMode} = before.delivery_policy;
+  const {risk_overrides: rows, ...mode} = next.delivery_policy;
+  if (fingerprint(previousMode) !== fingerprint(mode)) return false;
+  const ownerEvents = events.filter(event => event.actor === "owner").map(event => event.command);
+  const active = rows.filter(row => row.status === "CONFIRMED");
+  const oldById = new Map(oldRows.map(row => [row.id, row]));
+  const added = active.filter(row => !oldById.has(row.id));
+  if (!added.length || added.some(row => row.resolution !== "UPGRADE_SCOPE" ||
+    !ownerEvents.some(command => command.kind === "MODE_OVERRIDE_RESOLVED" && command.override_id === row.id &&
+      command.resolution === row.resolution && command.rationale === row.rationale))) return false;
+  return oldRows.every(prior => {
+    const current = rows.find(row => row.id === prior.id);
+    if (fingerprint(current ?? null) === fingerprint(prior)) return true;
+    if (prior.status !== "CONFIRMED" || prior.resolution !== "UPGRADE_SCOPE" || current?.status !== "RETRACTED") return false;
+    return ownerEvents.some(command => command.kind === "MODE_OVERRIDE_RETRACTED" && command.override_id === prior.id) &&
+      added.some(row => row.reason_code === prior.reason_code && row.minimum_mode === prior.minimum_mode &&
+        prior.scope_ids.every(id => row.scope_ids.includes(id)));
+  });
+}
+
+/** Closing owns documentation rebindings using the originally approved technical choice. */
+function planClosingBlueprintRefresh(next: Project, events: DomainEvent[]): Command | undefined {
+  const blueprint = currentBlueprint(next);
+  const detail = blueprint?.blueprint_detail;
+  if (blueprint?.status !== "CONFIRMED" || !detail?.owner_disposition) return;
+  const assessment = assessFeasibility(next), risk = evaluateRisk(next);
+  if (!assessment.ready || assessment.fingerprint === detail.feasibility_fingerprint ||
+    risk.unresolved_blocker_count || invalidRiskOverrides(next).length || solutionBlockingInputs(next).length ||
+    refreshedLinks(blueprint, assessment).length > 160) return;
+  const start = events.findLastIndex(({command}) => (command.kind === "SOLUTION_BLUEPRINT_APPROVED" ||
+    command.kind === "SOLUTION_BLUEPRINT_DELEGATED" || command.kind === "SOLUTION_BLUEPRINT_BINDING_REFRESHED") && command.item_id === blueprint.id);
+  if (start < 0) return;
+  const before = replay(events.slice(0, start + 1));
+  if (fingerprint(currentBlueprint(before) ?? null) !== fingerprint(blueprint) ||
+    assessFeasibility(before).fingerprint !== detail.feasibility_fingerprint || before.profile !== next.profile) return;
+  const followup = events.slice(start + 1);
+  const policyChanged = fingerprint(before.delivery_policy ?? null) !== fingerprint(next.delivery_policy ?? null);
+  const approvedExpansion = policyChanged && approvedScopeExpansions(before, next, followup);
+  if (policyChanged && !approvedExpansion) return;
+  const unchangedRisk = (p: Project) => evaluateRisk(p).findings.map(finding =>
+    finding.status === "SATISFIED_BY_PROJECT_MODE"
+      ? {reason_code: finding.reason_code, minimum_mode: finding.minimum_mode, status: finding.status}
+      : finding);
+  if (!approvedExpansion && fingerprint(unchangedRisk(before)) !== fingerprint(unchangedRisk(next))) return;
+  const technicalOptions = (p: Project) => {
+    const {options, recommended, local, browserOnly, browserMemory, game, mobile, desktop} = recommendSolutions(p);
+    return {options, recommended, local, browserOnly, browserMemory, game, mobile, desktop};
+  };
+  if (fingerprint(technicalOptions(before)) !== fingerprint(technicalOptions(next))) return;
+  const authority = new Set(followup.flatMap(event => {
+    const command = event.command;
+    if (command.kind === "ACCEPTANCE_LINKS_DERIVED" || command.kind === "ACCEPTANCE_WORDING_REUSED" ||
+      event.actor === "owner" && (command.kind === "ITEM_TEXT_REVISED" || command.kind === "ITEM_CONFIRMED" || command.kind === "ACCEPTANCE_LINKS_ADDED")) {
+      return [command.item_id];
+    }
+    return [];
+  }));
+  const old = new Map(confirmedSolutionInputs(before).map(item => [item.id, item]));
+  const current = new Map(confirmedSolutionInputs(next).map(item => [item.id, item]));
+  if ([...old.keys()].some(id => !current.has(id))) return;
+  const updates = [...current.values()].filter(item => item.version !== old.get(item.id)?.version);
+  const types = ["functional_requirement", "non_functional_requirement", "acceptance_criterion", "data_entity",
+    ...(approvedExpansion ? ["vision", "actor", "constraint"] : [])];
+  if (!updates.length || updates.length > 50 || updates.some(item => {
+    const previous = old.get(item.id);
+    if (!authority.has(item.id) || !types.includes(item.type) ||
+      item.supersedes !== previous?.supersedes) return true;
+    const priorClauses = new Set(clauses(previous?.statement ?? ""));
+    return item.type !== "acceptance_criterion" && clauses(item.statement).some(clause => !priorClauses.has(clause) &&
+      (solutionChange.test(clause) || expandedAccess.test(clause)));
+  })) return;
+  return {kind: "SOLUTION_BLUEPRINT_BINDING_REFRESHED", item_id: blueprint.id, previous_binding: detail.feasibility_fingerprint,
+    basis: updates.map(({id, version}) => ({id, version}))};
+}
+
+type RiskResolution = Extract<Command, {kind: "MODE_OVERRIDE_RESOLVED"}>;
+export function supersededSandboxes(project: Project, overrideId: string, resolution: RiskResolution["resolution"]): string[] {
+  if (resolution !== "STUB_OR_SANDBOX") return [];
+  const findings = evaluateRisk(project).findings;
+  const finding = findings.find(row => row.override_id === overrideId);
+  if (!finding) return [];
+  const current = new Set(findings.map(row => row.override_id));
+  return (project.delivery_policy?.risk_overrides ?? []).filter(row =>
+    row.status === "CONFIRMED" && row.resolution === resolution && !current.has(row.id) &&
+    row.reason_code === finding.reason_code && row.minimum_mode === finding.minimum_mode &&
+    row.scope_ids.length < finding.scope_ids.length && row.scope_ids.every(id => finding.scope_ids.includes(id))
+  ).map(row => row.id).sort();
+}
+
+// After a same-policy sandbox expansion, reuse the last approved binding only for
+// unchanged technical inputs plus additive, confirmed integration constraints.
+function planSandboxBlueprintRefresh(next: Project, events: DomainEvent[]): Command | undefined {
+  const blueprint = currentBlueprint(next), detail = blueprint?.blueprint_detail;
+  if (blueprint?.status !== "CONFIRMED" || !detail?.owner_disposition) return;
+  const assessment = assessFeasibility(next);
+  if (!assessment.ready || assessment.fingerprint === detail.feasibility_fingerprint ||
+    evaluateRisk(next).unresolved_blocker_count || invalidRiskOverrides(next).length ||
+    solutionBlockingInputs(next).length || refreshedLinks(blueprint, assessment).length > 160) return;
+  const index = events.findLastIndex(({command}) =>
+    (command.kind === "SOLUTION_BLUEPRINT_APPROVED" || command.kind === "SOLUTION_BLUEPRINT_DELEGATED" ||
+      command.kind === "SOLUTION_BLUEPRINT_BINDING_REFRESHED") && command.item_id === blueprint.id);
+  if (index < 0) return;
+  const previous = replay(events.slice(0, index + 1)), base = currentBlueprint(previous);
+  if (fingerprint(base ?? null) !== fingerprint(blueprint) || assessFeasibility(previous).fingerprint !== detail.feasibility_fingerprint ||
+    previous.delivery_policy?.effective_mode !== next.delivery_policy?.effective_mode ||
+    fingerprint(recommendSolutions(previous)) !== fingerprint(recommendSolutions(next))) return;
+  const old = previous.delivery_policy?.risk_overrides.filter(row => row.status === "CONFIRMED") ?? [];
+  const active = next.delivery_policy?.risk_overrides.filter(row => row.status === "CONFIRMED") ?? [];
+  const activeIds = new Set(active.map(row => row.id));
+  const nextRisk = next.delivery_policy?.risk_overrides ?? [];
+  const replaced = old.filter(row => !activeIds.has(row.id));
+  const added = active.filter(row => !old.some(prior => prior.id === row.id));
+  const covers = (candidate: typeof active[number], prior: typeof old[number]) =>
+    candidate.resolution === "STUB_OR_SANDBOX" && prior.resolution === candidate.resolution &&
+    candidate.reason_code === prior.reason_code && candidate.minimum_mode === prior.minimum_mode &&
+    candidate.scope_ids.length > prior.scope_ids.length && prior.scope_ids.every(id => candidate.scope_ids.includes(id));
+  if (!replaced.length || !added.length ||
+    !old.filter(row => activeIds.has(row.id)).every(row => fingerprint(row) === fingerprint(active.find(v => v.id === row.id))) ||
+    replaced.some(row => !nextRisk.some(v => v.id === row.id && v.status === "RETRACTED") || !added.some(v => covers(v, row))) ||
+    added.some(row => !replaced.some(v => covers(row, v)))) return;
+  const confirmed = next.items.filter(item => item.status === "CONFIRMED");
+  const priorConfirmed = previous.items.filter(item => item.status === "CONFIRMED");
+  if (priorConfirmed.some(item => !confirmed.some(current => current.id === item.id && itemFingerprint(current) === itemFingerprint(item)))) return;
+  const priorIds = new Set(priorConfirmed.map(item => item.id));
+  if (confirmed.some(item => !priorIds.has(item.id) && (item.supersedes ||
+    !["functional_requirement", "acceptance_criterion", "integration"].includes(item.type) || changesSolution(item.statement)))) return;
+  const inputs = new Map(detail.feasibility_inputs.map(input => [input.key, input.evidence_ids]));
+  const basis = assessment.inputs.flatMap(input => input.evidence_ids.filter(id => !inputs.get(input.key)?.includes(id)).map(id => ({key: input.key, id})));
+  if (!basis.length || basis.length > 50 || assessment.inputs.some(input => inputs.get(input.key)?.some(id => !input.evidence_ids.includes(id))) ||
+    basis.some(({key, id}) => key !== "INTEGRATION_CONSTRAINTS" || !confirmed.some(item =>
+      item.id === id && item.type === "integration" && !item.supersedes && !changesSolution(item.statement)))) return;
+  return {kind: "SOLUTION_BLUEPRINT_BINDING_REFRESHED", item_id: blueprint.id,
+    previous_binding: detail.feasibility_fingerprint, basis: basis.map(({id}) => ({id, version: confirmed.find(item => item.id === id)!.version}))};
 }
 
 function migrate(command: Extract<Command, {kind: "SCHEMA_MIGRATED"}>, id: string): Project {
@@ -156,6 +312,44 @@ function transition(previous: Project | undefined, event: Omit<DomainEvent, "has
       requireCondition(itemFingerprint(item)===command.fingerprint,"FINGERPRINT_MISMATCH");
       item.statement=command.statement;item.status="CONFIRMED";item.version++;
       item.updated_at=at;item.confirmed_at=at;item.confirmed_by="owner";item.source_refs.push(command.owner_action.source_ref);
+    } else if (command.kind === "ACCEPTANCE_LINKS_ADDED" || command.kind === "ACCEPTANCE_LINKS_DERIVED") {
+      requireCondition(actor === (command.kind === "ACCEPTANCE_LINKS_ADDED" ? "owner" : "agent"), "ACCEPTANCE_LINK_AUTHORITY");
+      const item = project.items.find(entry => entry.id === command.item_id);
+      requireCondition(item?.type === "acceptance_criterion" && item.status === "CONFIRMED", "CONFIRMED_ACCEPTANCE_REQUIRED");
+      requireCondition(itemFingerprint(item) === command.fingerprint, "FINGERPRINT_MISMATCH");
+      const currentLinks = item.links ?? [];
+      const ids = command.kind === "ACCEPTANCE_LINKS_ADDED" ? command.requirement_ids : command.basis.map(row => row.requirement_id);
+      requireCondition(new Set(ids).size === ids.length && ids.every(id => !currentLinks.includes(id)), "ACCEPTANCE_LINK_ALREADY_PRESENT");
+      requireCondition(ids.every(id => project.items.some(requirement => requirement.id === id &&
+        requirement.type === "functional_requirement" && requirement.status === "CONFIRMED")), "CONFIRMED_FUNCTIONAL_REQUIREMENT_REQUIRED");
+      requireCondition(currentLinks.length + ids.length <= 20, "ACCEPTANCE_LINK_LIMIT_EXCEEDED");
+      if (command.kind === "ACCEPTANCE_LINKS_DERIVED") {
+        for (const row of command.basis) {
+          const requirement = project.items.find(entry => entry.id === row.requirement_id)!;
+          requireCondition(item.statement.includes(row.criterion_quote) && requirement.statement.includes(row.requirement_quote) &&
+            row.requirement_fingerprint === itemFingerprint(requirement), "ACCEPTANCE_LINK_SOURCE_MISMATCH");
+        }
+        item.source_refs.push({type: "system_rule", ref: "xmi:acceptance-trace:" + fingerprint(command.basis)});
+      }
+      item.links = [...currentLinks, ...ids];
+      item.version++;
+      item.updated_at = at;
+    } else if (command.kind === "ACCEPTANCE_WORDING_REUSED") {
+      const item = project.items.find(entry => entry.id === command.item_id);
+      const requirement = project.items.find(entry => entry.id === command.requirement_id);
+      requireCondition(actor === "agent" && item?.type === "acceptance_criterion" && item.status === "PROPOSED" &&
+        !item.supersedes && requirement?.type === "functional_requirement" && requirement.status === "CONFIRMED" &&
+        item.links?.length === 1 && item.links[0] === requirement.id &&
+        item.statement === requirement.statement && itemFingerprint(item) === command.fingerprint &&
+        itemFingerprint(requirement) === command.requirement_fingerprint, "ACCEPTANCE_WORDING_NOT_IDENTICAL");
+      const original = requirement.source_refs.findLast(ref => ref.type === "owner_action");
+      requireCondition(original && requirement.confirmed_at && requirement.confirmed_by === "owner", "CONFIRMED_REQUIREMENT_SOURCE_REQUIRED");
+      item.status = "CONFIRMED";
+      item.confirmed_at = requirement.confirmed_at;
+      item.confirmed_by = requirement.confirmed_by;
+      item.source_refs.push(original, {type: "system_rule", ref: "xmi:acceptance-wording:" + requirement.id});
+      item.version++;
+      item.updated_at = at;
     } else if (command.kind === "DECISION_APPROVED") {
       requireCondition(actor === "owner", "OWNER_ACTION_REQUIRED");
       const item = project.items.find((i) => i.id === command.item_id);
@@ -249,6 +443,12 @@ function transition(previous: Project | undefined, event: Omit<DomainEvent, "has
       requireCondition(project.delivery_policy, "MODE_SELECTION_REQUIRED");
       const finding = (command.risk_revision === 2 ? evaluateRisk : evaluateRiskLegacy)(project).findings.find((entry) => entry.override_id === command.override_id);
       requireCondition(finding, "MODE_OVERRIDE_NOT_FOUND");
+      const replaces = command.replaces_override_ids ?? [];
+      if (replaces.length) {
+        const eligible = supersededSandboxes(project, finding.override_id, command.resolution);
+        requireCondition(command.risk_revision === 2 && new Set(replaces).size === replaces.length &&
+          replaces.every(id => eligible.includes(id)), "MODE_OVERRIDE_REPLACEMENT_INVALID");
+      }
       // F-4: the frozen handoff contract declares an override whose minimum_mode ranks below the
       // effective project mode invalid, and a conforming consumer must reject the whole package when
       // it sees one. Such an override is also vacuous, because the project mode already meets that
@@ -281,6 +481,10 @@ function transition(previous: Project | undefined, event: Omit<DomainEvent, "has
       const index = project.delivery_policy.risk_overrides.findIndex((entry) => entry.id === finding.override_id);
       if (index >= 0) project.delivery_policy.risk_overrides[index] = next;
       else project.delivery_policy.risk_overrides.push(next);
+      for (const old of project.delivery_policy.risk_overrides) if (replaces.includes(old.id)) {
+        old.status = "RETRACTED";
+        old.source_refs.push(command.owner_action.source_ref);
+      }
     } else if (command.kind === "MODE_OVERRIDE_RETRACTED") {
       requireCondition(actor === "owner", "OWNER_ACTION_REQUIRED");
       requireCondition(project.delivery_policy, "MODE_SELECTION_REQUIRED");
@@ -345,6 +549,85 @@ export class ProjectService {
     this.clock = clock;
   }
 
+  previewBlueprintCarryForward(before: Project, next: Project, commands: Command[]) {
+    return planBlueprintRefresh(before, next, commands) ??
+      (commands.some(command => command.kind === "MODE_OVERRIDE_RESOLVED") ?
+        planSandboxBlueprintRefresh(next, this.history(before.project_id).filter(event => event.version <= before.model_version)) : undefined);
+  }
+
+  refreshApprovedBlueprint(projectId: string, version: number, key: string): Project {
+    return this.store.transaction(tx => {
+      const receiptKey = projectId + ":blueprint-binding:" + key;
+      const requestHash = fingerprint({projectId, version, key});
+      const saved = tx.receipt(receiptKey);
+      if (saved) return this.retry(tx, saved, requestHash);
+      const events = tx.events(projectId), project = replay(events);
+      requireCondition(project.model_version === version, "VERSION_CONFLICT");
+      requireCondition(fingerprint(tx.snapshot(projectId)) === fingerprint(project), "CORRUPT_SNAPSHOT");
+      const blueprint = currentBlueprint(project);
+      if (blueprint?.status === "CONFIRMED" && blueprint.blueprint_detail?.owner_disposition &&
+        blueprint.blueprint_detail.feasibility_fingerprint === assessFeasibility(project).fingerprint) return project;
+      const refresh = planSandboxBlueprintRefresh(project, events) ?? planClosingBlueprintRefresh(project, events);
+      requireCondition(refresh, "BLUEPRINT_TECHNICAL_REVIEW_REQUIRED");
+      return this.persist(tx, projectId, version, receiptKey, refresh, "agent", requestHash, {project, lastHash: events.at(-1)!.hash});
+    });
+  }
+
+  reconcileForClosing(projectId: string, version: number, key: string, links: ClosingLinkRepair[]) {
+    return this.store.transaction(tx => {
+      const receiptKey = projectId + ":closing:" + key;
+      const requestHash = fingerprint({projectId, version, links});
+      const saved = tx.receipt(receiptKey);
+      if (saved) return {project: this.retry(tx, saved, requestHash), repairs: []};
+      const events = tx.events(projectId), project = replay(events);
+      requireCondition(project.model_version === version, "VERSION_CONFLICT");
+      requireCondition(fingerprint(tx.snapshot(projectId)) === fingerprint(project), "CORRUPT_SNAPSHOT");
+      requireCondition(links.length <= 50 && new Set(links.map(row => row.item_id)).size === links.length, "INVALID_ACCEPTANCE_REPAIR_BATCH");
+      const trace = new Map(links.map(link => [link.item_id, link]));
+      const requirements = project.items.filter(item => item.type === "functional_requirement" && item.status === "CONFIRMED" && item.statement.trim().length >= 8);
+      for (const criterion of project.items) {
+        if (criterion.type !== "acceptance_criterion" || criterion.status !== "CONFIRMED" || criterion.statement.trim().length < 8 ||
+          trace.has(criterion.id) || trace.size >= 50) continue;
+        const remaining = 20 - (criterion.links?.length ?? 0);
+        const missing = requirements.filter(requirement => !criterion.links?.includes(requirement.id) &&
+          (requirement.links?.includes(criterion.id) || requirement.statement === criterion.statement)).slice(0, Math.max(0, remaining));
+        if (missing.length) trace.set(criterion.id, {item_id: criterion.id, fingerprint: itemFingerprint(criterion),
+          basis: missing.map(requirement => ({requirement_id: requirement.id, requirement_fingerprint: itemFingerprint(requirement),
+            criterion_quote: criterion.statement.trim().slice(0, 100), requirement_quote: requirement.statement.trim().slice(0, 100)}))});
+      }
+      const planned = [...trace.values()];
+      const commands: Command[] = planned.map(link => commandSchema.parse({kind: "ACCEPTANCE_LINKS_DERIVED", ...link}));
+      const covered = new Set(project.items.filter(item => item.type === "acceptance_criterion" && item.status === "CONFIRMED")
+        .flatMap(item => item.links ?? []).concat(planned.flatMap(link => link.basis.map(row => row.requirement_id))));
+      for (const item of project.items) {
+        if (item.type !== "acceptance_criterion" || item.status !== "PROPOSED" || item.supersedes || item.links?.length !== 1 || covered.has(item.links[0]!)) continue;
+        const requirement = project.items.find(row => row.id === item.links![0] && row.type === "functional_requirement" && row.status === "CONFIRMED");
+        const approval = requirement && events.findLast(event => event.actor === "owner" &&
+          (event.command.kind === "ITEM_CONFIRMED" || event.command.kind === "ITEM_TEXT_REVISED") && event.command.item_id === requirement.id);
+        if (requirement?.statement !== item.statement || !approval || commands.length >= 50) continue;
+        commands.push({kind: "ACCEPTANCE_WORDING_REUSED", item_id: item.id, fingerprint: itemFingerprint(item),
+          requirement_id: requirement.id, requirement_fingerprint: itemFingerprint(requirement)});
+        covered.add(requirement.id);
+      }
+      requireCondition(commands.length <= 50, "INVALID_ACCEPTANCE_REPAIR_BATCH");
+      const state = {project, lastHash: events.at(-1)!.hash};
+      const repairs: string[] = [];
+      for (const [index, command] of commands.entries()) {
+        this.persist(tx, projectId, state.project.model_version, receiptKey + ":" + index, command,
+          "agent", fingerprint({command, actor: "agent"}), state);
+        if ("item_id" in command) repairs.push(command.item_id);
+      }
+      const refresh = planSandboxBlueprintRefresh(state.project, tx.events(projectId)) ?? planClosingBlueprintRefresh(state.project, tx.events(projectId));
+      if (refresh) {
+        this.persist(tx, projectId, state.project.model_version, receiptKey + ":blueprint", refresh,
+          "agent", fingerprint({command: refresh, actor: "agent"}), state);
+        if ("item_id" in refresh) repairs.push(refresh.item_id);
+      }
+      if (repairs.length) tx.saveReceipt(receiptKey, {project_id: projectId, version: state.project.model_version, request_hash: requestHash});
+      return {project: structuredClone(state.project), repairs};
+    });
+  }
+
   create(input: unknown, actor: Actor = "agent"): Project {
     const parsed = z.strictObject({
       idempotency_key: z.string().min(1).max(200), title: z.string().min(1).max(200),
@@ -372,6 +655,8 @@ export class ProjectService {
     const request = parsed.data;
     requireCondition(request.command.kind !== "PROJECT_CREATED", "USE_CREATE");
     requireCondition(request.command.kind !== "SOLUTION_BLUEPRINT_BINDING_REFRESHED", "INTERNAL_COMMAND_REQUIRED");
+    requireCondition(request.command.kind !== "ACCEPTANCE_LINKS_ADDED", "NATIVE_ACTION_BATCH_REQUIRED");
+    requireCondition(request.command.kind !== "ACCEPTANCE_LINKS_DERIVED" && request.command.kind !== "ACCEPTANCE_WORDING_REUSED", "INTERNAL_COMMAND_REQUIRED");
     rejectSecrets(request.command);
     const hash = fingerprint({ ...request, actor });
     return this.store.transaction((tx) => {
@@ -473,7 +758,9 @@ export class ProjectService {
         this.persist(tx, request.project_id, request.expected_version, request.project_id + ":" + request.idempotency_key,
           request.command, "owner", fingerprint({...request, actor: "owner"}), validated);
       }
-      const refresh = review.preserve_blueprint_choices && planBlueprintRefresh(project, validated.project, requests.map(request => request.command));
+      const commands = requests.map(request => request.command);
+      const refresh = review.preserve_blueprint_choices && (planBlueprintRefresh(project, validated.project, commands) ??
+        (commands.some(command => command.kind === "MODE_OVERRIDE_RESOLVED") ? planSandboxBlueprintRefresh(validated.project, events) : undefined));
       if (refresh) this.persist(tx, review.project_id, validated.project.model_version, refreshKey, refresh, "agent",
         fingerprint({command: refresh, actor: "agent"}), validated);
       beforeCommit(); return structuredClone(validated.project);

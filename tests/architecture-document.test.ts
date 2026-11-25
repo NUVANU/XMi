@@ -152,12 +152,17 @@ test("one real-shape native confirmation generates architecture before independe
   assert.equal(existsSync(file),true);assert.equal(readFileSync(file,"utf8"),doc.content);assert.equal(f.service.history(f.id).length,before+1);
   const started=await f.call("xmi_spec_review_start",{project_id:f.id,expected_version:current.model_version,session_id:f.session,idempotency_key:"TEST_ONLY-architecture-review"});
   assert.equal(started.data.state,"AWAITING_AGENT");assert.ok(started.data.host_job);
+  const continuation = applied.data.post_commit_review as {ok: boolean; data: {run_id: string}};
+  assert.equal(continuation.ok, true);
+  assert.equal(continuation.data.run_id, started.data.run_id);
   const db=new SqliteSpecReviewStore(join(f.projectRoot,".xmi/reviews/reviews.sqlite"));
   try{const saved=db.get(f.id,started.data.run_id as string)!;
     assert.equal(containsCurrentArchitecture(current,saved.bundle.candidate.files.find(v=>v.path===ARCHITECTURE_PACKAGE_FILE)!.content),true);
     const packet=JSON.parse(readFileSync(saved.run.host!.material_path,"utf8"));
-    assert.ok(packet.documents.find((d:{path:string;content:string})=>d.path===ARCHITECTURE_PACKAGE_FILE).content.startsWith(doc.content));
-    assert.match(packet.instruction,/state\/data ownership|state\/data|module responsibilities/);
+    const architecturePages = packet.pages.filter((page:{path:string})=>page.path===ARCHITECTURE_PACKAGE_FILE);
+    assert.ok(architecturePages.every((page:{required:boolean}) => page.required));
+    assert.ok(architecturePages.map((page:{content:string})=>page.content).join("").startsWith(doc.content));
+    assert.match(JSON.parse(packet.introduction).instruction,/genuine safety and contract conflicts/);
   }finally{db.close();}
   assert.equal(f.forms(),0);assert.equal(f.service.history(f.id).length,before+1);
 });

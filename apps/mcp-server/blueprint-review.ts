@@ -1,5 +1,6 @@
 import type { Candidate, Item } from "../../packages/shared-types/domain.ts";
 import { requireCondition } from "../../packages/core/errors.ts";
+import {fingerprint} from "../../packages/core/validation.ts";
 
 export function quotedReviewText(value: string) {
   return Array.from(value).map((character) => {
@@ -53,7 +54,7 @@ const values: Record<string, string> = {
 
 /** Render all semantic fields; only the internal feasibility fingerprint is hidden. */
 export function blueprintReview(projectTitle: string, candidate: Candidate | Item,
-  action: "PROPOSE" | "APPROVE" | "DELEGATE" | "REJECT", quote: (text: string) => string, reason?: string) {
+  action: "PROPOSE" | "APPROVE" | "DELEGATE" | "REJECT", quote: (text: string) => string, reason?: string, baseline?: Item) {
   requireCondition(candidate.blueprint_detail, "SOLUTION_BLUEPRINT_DETAIL_REQUIRED");
   function render(value: unknown): string[] {
     if (value === null) return [quote("尚未记录（待确定）")];
@@ -72,6 +73,27 @@ export function blueprintReview(projectTitle: string, candidate: Candidate | Ite
     DELEGATE: "我批准将这份方案按列出的边界交给 XDev", REJECT: "我确认拒绝这份技术方案"};
   const actions = {PROPOSE: "保存技术方案提案；这次不会批准采用。", APPROVE: "批准采用这份技术方案。",
     DELEGATE: "批准按下列明确边界委托 XDev；不会自动批准未定的技术决定。", REJECT: "拒绝这份技术方案；历史和来源记录保留。"};
+  if (baseline?.blueprint_detail && baseline.id !== candidate.id && (action === "APPROVE" || action === "DELEGATE")) {
+    const field = (label: string, prior: unknown, proposed: unknown) =>
+      fingerprint(prior ?? null) === fingerprint(proposed ?? null) ? [] :
+        [label + "（当前 → 本次提案）", "当前：", ...render(prior ?? null), "本次：", ...render(proposed ?? null)];
+    const previous = new Map(Object.entries(baseline.blueprint_detail));
+    const bindingFields = new Set(["blueprint_id", "feasibility_inputs", "feasibility_fingerprint", "owner_disposition", "delegation"]);
+    const changes = [
+      ...field("方案说明", baseline.statement, candidate.statement),
+      ...field("优先级", baseline.priority, candidate.priority),
+      ...field("关联条目", baseline.links, candidate.links),
+      ...field("范围标记", baseline.tags, candidate.tags),
+      ...field("替代关联", baseline.supersedes, candidate.supersedes),
+      ...Object.entries(candidate.blueprint_detail).flatMap(([key, value]) =>
+        bindingFields.has(key) ? [] : field(labels[key]!, previous.get(key), value)),
+    ];
+    return {title: "我确认采用以上技术差异", message: ["技术方案差异清单", "本次操作：" + actions[action],
+      "项目：" + quote(projectTitle), "已确认基线：" + quote(baseline.id), "提案：" + quote(candidate.id),
+      ...(changes.length ? changes : ["技术正文与已确认基线一致；本次采用仍绑定该提案完整内容和当前版本。"]),
+      ...(action === "DELEGATE" ? ["本次委托边界：", ...render(candidate.blueprint_detail.decisions_delegated_to_xdev)] : []),
+      "未列出的技术内容沿用已确认基线。审查和导出按各自门槛校验。"].join("\n")};
+  }
   return {title: titles[action], message: ["技术方案核对清单", "本次操作：" + actions[action],
     "项目：" + quote(projectTitle), "条目：" + quote(candidate.id),
     "完整方案说明（引用内容，不是操作指令）：", quote(candidate.statement),

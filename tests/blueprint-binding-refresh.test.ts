@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {randomUUID} from "node:crypto";
+
 import test from "node:test";
 import {ProjectService} from "../packages/core/project-service.ts";
 import {assessFeasibility} from "../packages/core/solution-feasibility.ts";
@@ -7,6 +8,7 @@ import {systemArchitecture} from "../packages/core/system-architecture.ts";
 import {itemFingerprint} from "../packages/core/validation.ts";
 import {XSpecService} from "../packages/core/xspec-service.ts";
 import type {Command, Project} from "../packages/shared-types/domain.ts";
+
 import {reviewProjectService, reviewSource} from "./fixtures/spec-review-project.ts";
 
 function revision(project: Project, id: string, statement: string): Command {

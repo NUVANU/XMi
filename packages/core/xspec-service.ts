@@ -151,7 +151,8 @@ function exportedConfirmedItems(project: Project, xspec: XSpecDocument): Item[] 
   if (blueprint) ids.add(blueprint.id);
   return byId(project.items.filter(item => item.status === "CONFIRMED" && ids.has(item.id)));
 }
-function producerEvidence(project: Project, xspec: XSpecDocument, historySource?: ProjectService): ProducerEvidence {
+type ProducerHistorySource = Pick<ProjectService, "history">;
+function producerEvidence(project: Project, xspec: XSpecDocument, historySource?: ProducerHistorySource): ProducerEvidence {
   // Only the locally wired domain service supplies history; MCP callers cannot submit events.
   const events = historySource?.history?.(project.project_id);
   if (events) requireCondition(fingerprint(replay(events)) === fingerprint(project), "PRODUCER_HISTORY_VERSION_MISMATCH");
@@ -162,8 +163,12 @@ function producerEvidence(project: Project, xspec: XSpecDocument, historySource?
     event.command.mode === policy.project_mode) : undefined;
   const mode = {...referenced(eventReference(modeEvent)), project_mode: policy.project_mode, selection_source: policy.selection_source};
   const items = exportedConfirmedItems(project, xspec).map(item => {
+    const reused = latest(event => event.command.kind === "ACCEPTANCE_WORDING_REUSED" && event.command.item_id === item.id)?.command;
     const source = eventReference(latest(event => {
       const command = event.command;
+      if (reused?.kind === "ACCEPTANCE_WORDING_REUSED" && event.actor === "owner" &&
+        (command.kind === "ITEM_CONFIRMED" || command.kind === "ITEM_TEXT_REVISED") && command.item_id === reused.requirement_id &&
+        item.source_refs.some(ref => ref.type === "owner_action" && ref.ref === command.owner_action.source_ref.ref)) return true;
       return (command.kind === "ITEM_CONFIRMED" || command.kind === "DECISION_APPROVED" ||
         command.kind === "SOLUTION_BLUEPRINT_APPROVED" || command.kind === "SOLUTION_BLUEPRINT_DELEGATED") &&
         command.item_id === item.id;
@@ -470,7 +475,7 @@ function schemaFailureIsOnlyMissingAcceptance(xspec: XSpecDocument): boolean {
   return !!schemaValidators.xspec!(probe);
 }
 
-function buildArtifact(project: Project, evidence: M8ReadinessEvidence, delivery?: DeliveryWorkflow, historySource?: ProjectService): CompiledArtifact {
+function buildArtifact(project: Project, evidence: M8ReadinessEvidence, delivery?: DeliveryWorkflow, historySource?: ProducerHistorySource): CompiledArtifact {
   const xspec = compileDocument(project, evidence);
   rejectSecrets(xspec);
   const schemaValid = !!schemaValidators.xspec!(xspec);
@@ -656,8 +661,8 @@ function packageManifestValid(artifact: CompiledArtifact, xspec: XSpecDocument |
 
 export class XSpecService {
   private projectDirectory?: string;
-  private historySource?: ProjectService;
-  constructor(projectDirectory?: string, historySource?: ProjectService) {
+  private historySource?: ProducerHistorySource;
+  constructor(projectDirectory?: string, historySource?: ProducerHistorySource) {
     this.projectDirectory = projectDirectory; this.historySource = historySource;
   }
   private exportRoot(packageName: string) {

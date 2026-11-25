@@ -13,3 +13,7 @@ WorkBuddy form elicitation and clean-host installation of the new helper are unv
 ## 2026-11-22 update boundaries
 
 See [UPDATE-20261122.md](UPDATE-20261122.md). The new blueprint-binding event is additive but needs an updated reader; older readers may require the pre-upgrade backup. New Stop hook trust and a reconnect are required before active-host adoption can be claimed. Prototype structural and recognized-risk checks are not general semantic verification. The opt-in local prototype adapter is not a hosted DreamKids service. The earlier dated source sync shared version 0.1.2 with older assets; fixed release v0.1.3 now distinguishes this update. Use its version and release commit.
+
+## 2026-11-25 update boundaries
+
+V0.1.4 is a source update; older fixed v0.1.3 attachments do not include it. The optional Windows formal launcher needs capability checks, trusted local configuration and appropriate data authorization. It may use a model service and quota. Test receipts do not establish all real-host isolation or formal readiness; unresolved findings remain unresolved. Compaction checkpoints do not prove correct later adoption. See [UPDATE-20261125.md](UPDATE-20261125.md).

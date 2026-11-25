@@ -12,6 +12,16 @@ You should not have to know the code before you can explain the product you want
 
 **XMi helps you make those decisions before they become code.** Discuss your idea module by module, see what is confirmed and what is still open, and export a versioned specification that another developer or agent can inspect.
 
+## What's new in V0.1.4
+
+**Fewer closing steps, stronger review evidence.** The native `xmi_finalize` entry gathers outstanding design decisions and readiness checks; numbered document pages and bound short replies keep the review understandable. Unchanged confirmed choices can be reused where valid. A real product change still requires its own displayed decision and genuine reply.
+
+- **Preserve complete review material.** Formal-review input uses a lossless span dictionary with source anchors; receipts are checked against the frozen project/version and required findings. Missing, stale or incomplete evidence stays unresolved.
+- **Connect supported Windows review.** The formal-review launcher and receipt recovery serve a configured Windows/Codex path. It needs trusted local configuration and appropriate authorization; missing capability does not become a passing review.
+- **Carry design context through compaction.** Native PreCompact/PostCompact hooks save and check project/version context. An optional configured XMem route can preserve checkpoints; these records do not confirm decisions or prove correct later adoption.
+
+**Latest source:** [V0.1.4 source ZIP](https://github.com/NUVANU/XMi/archive/refs/heads/main.zip). The fixed [v0.1.3 Release](https://github.com/NUVANU/XMi/releases/tag/v0.1.3) and its lightweight installer are an **older version** and do not contain this update. See [setup, compatibility, privacy and validation scope](docs/public/UPDATE-20261125.md).
+
 ## What’s new in V0.1.3
 
 **V0.1.3** packages the 2026-11-22 source update as fixed downloads: [Release](https://github.com/NUVANU/XMi/releases/tag/v0.1.3) · [Lightweight ZIP](https://github.com/NUVANU/XMi/releases/download/v0.1.3/xmi-0.1.3-lite.zip) · [Source ZIP](https://github.com/NUVANU/XMi/releases/download/v0.1.3/xmi-0.1.3-source.zip) · [SHA-256 checksums](https://github.com/NUVANU/XMi/releases/download/v0.1.3/SHA256SUMS.txt). The earlier v0.1.2 release stays available unchanged. See [release notes](docs/public/RELEASE-0.1.3.md).
@@ -87,7 +97,7 @@ The current XDev handoff contract uses a 16-file package with manifest/content h
 
 ## Quick start
 
-Current public source: **V0.1.3 · package `0.1.3` · Apache-2.0**.
+Current public source: **V0.1.4 · package `0.1.4` · Apache-2.0**.
 
 Use **Node.js 24.20.0** and **npm 11.19.0**. Clone this repository or download its source, then run the following from its root:
 
@@ -136,6 +146,8 @@ For implementation details, see [architecture](docs/public/ARCHITECTURE.md), [pr
 XMi works without XMem. Its canonical product model is not delegated to a memory summary. For the combined local workflow, see [X Suite](https://github.com/NUVANU/X-Suite).
 
 ## Status, privacy, and limitations
+
+The V0.1.4 public tree passed **545 tests, zero failures/skips**, lint, build, temporary-data self-check, DOCX source verification and a 324-file archive-closure check. The suite excludes optional private-project replays. These source/packaging checks do not establish real-host formal readiness, clean-machine isolation, or correct post-compaction adoption. See [the current validation scope](docs/public/UPDATE-20261125.md).
 
 The V0.1.2 local release record reports **483 passing tests, zero failures** in both the tested source and installed release tree, plus a genuine workflow check in the existing Windows Codex desktop installation. That check applied one changed item, preserved ten unchanged confirmed items, generated the same-version 24-chapter architecture, and collected one real independent Agent review. See the [scoped acceptance summary](docs/public/releases/0.1.2/ACCEPTANCE-SUMMARY.json).
 

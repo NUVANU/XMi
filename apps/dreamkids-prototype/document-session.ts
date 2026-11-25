@@ -3,7 +3,7 @@ import {evaluateRisk} from "../../packages/core/completeness-service.ts";
 import {fingerprint, itemFingerprint, modeFingerprint} from "../../packages/core/validation.ts";
 import {ProjectService} from "../../packages/core/project-service.ts";
 import {MemoryProjectStore} from "../../packages/storage/memory.ts";
-import {prototypePreview, prototypePreviewSchema} from "../../packages/core/prototype-preview.ts";
+import {defaultPrototypeDesignFlow, prototypePreview, prototypePreviewSchema} from "../../packages/core/prototype-preview.ts";
 import {SolutionService} from "../../packages/core/solution-service.ts";
 import {XSpecService} from "../../packages/core/xspec-service.ts";
 import type {PrototypePreview} from "../../packages/core/prototype-preview.ts";
@@ -12,13 +12,13 @@ import {designOptions} from "./design-options.ts";
 import {numberedFlow} from "./flow-order.ts";
 import {openPrototypeConfirmationStore, publishPrototypeExport} from "./prototype-export.ts";
 
-function projection(source: Project, preview: PrototypePreview, service: ProjectService): Project {
-  const grant = {type: "owner_action" as const, ref: "dreamkids:confirmed-prototype-document:" + preview.snapshot_id};
+function projection(source: Project, preview: PrototypePreview, service: ProjectService, sourceRef?: string): Project {
+  const grant = {type: "owner_action" as const, ref: sourceRef ?? "dreamkids:confirmed-prototype-document:" + preview.snapshot_id};
   const policy: SourceRef = {type: "system_rule", ref: "xmi:dreamkids-private-prototype-v1"};
   const original = source.items.find(item => item.type === "vision")?.source_refs ?? [];
   const reason = "确认输出设计卡所示的本地私有原型文档。";
   let project = service.create({title: source.title, idea: preview.goal, profile: source.profile,
-    source_ref: original[0] ?? policy, idempotency_key: preview.snapshot_id});
+    source_ref: original[0] ?? policy, idempotency_key: sourceRef ? fingerprint({snapshot: preview.snapshot_id, owner: sourceRef}) : preview.snapshot_id});
   const apply = (command: Command, actor: "owner" | "agent" = "owner") => {
     const expected_version = project.model_version;
     project = service.execute({project_id: project.project_id, expected_version,
@@ -50,7 +50,7 @@ function projection(source: Project, preview: PrototypePreview, service: Project
   const vision = project.items[0]!;
   apply({kind: "ITEM_CONFIRMED", item_id: vision.id, fingerprint: itemFingerprint(vision),
     owner_action: {intent: "CONFIRM", source_ref: grant}});
-  if (game) add("GOAL-PROTOTYPE", "goal", preview.goal, original, [vision.id], ["game-premise", "player-outcome"]);
+  add("GOAL-PROTOTYPE", "goal", preview.goal, original, [vision.id], game ? ["game-premise", "player-outcome"] : ["problem", "outcome"]);
   add("ACTOR-PROTOTYPE", "actor", "一人独立试玩或试用。", [policy], undefined, game ? ["player-actor"] : undefined);
   add("FLOW-PROTOTYPE", "flow", preview.flow_title + "\n" + path, [policy], ["ACTOR-PROTOTYPE"],
     game ? ["core-loop", "game-outcome"] : undefined);
@@ -68,10 +68,13 @@ function projection(source: Project, preview: PrototypePreview, service: Project
   add("INTEGRATIONS-PROTOTYPE", "exclusion", displayedDefault("no-integration"), [policy], undefined, ["integrations-none"]);
   add("SCALE-PROTOTYPE", "non_functional_requirement", displayedDefault("scale"), [policy], undefined, ["scale"]);
   add("COST-PROTOTYPE", "non_functional_requirement", displayedDefault("cost"), [policy], undefined, ["cost"]);
+  add("ACCOUNTS-PROTOTYPE", "exclusion", displayedDefault("no-account"), [policy], undefined, ["identity", "profile-applicability:account_or_private:not-applicable"]);
+  add("PAYMENTS-PROTOTYPE", "exclusion", displayedDefault("no-payment"), [policy], undefined, ["profile-applicability:commercial:not-applicable"]);
   if (game) {
-    add("ACCOUNTS-PROTOTYPE", "exclusion", displayedDefault("no-account"), [policy], undefined, ["profile-applicability:account_or_private:not-applicable"]);
-    add("PAYMENTS-PROTOTYPE", "exclusion", displayedDefault("no-payment"), [policy], undefined, ["profile-applicability:commercial:not-applicable"]);
     add("ONLINE-PROTOTYPE", "exclusion", displayedDefault("no-online"), [policy], undefined, ["profile-applicability:game_online:not-applicable"]);
+  } else {
+    add("TOOL-PERSISTENCE", "constraint", displayedDefault("tool-persistence"), [policy], undefined, ["persistence"]);
+    add("TOOL-DATA-SAFETY", "constraint", displayedDefault("tool-data-safety"), [policy], undefined, ["regulated"]);
   }
   if (preview.presentation) add("VISUAL-PROTOTYPE", "constraint", "游戏画面采用 " + preview.presentation + "。", [policy]);
   requireCondition(evaluateRisk(project).findings.length === 0, "PROTOTYPE_RISK_REQUIRES_REVIEW");
@@ -97,16 +100,28 @@ export class DreamKidsDocumentSession {
   private readonly currentProject: () => Project;
   private readonly clock: () => string;
   private readonly outputDirectory: string | undefined;
+  private readonly ownerSourceRef: string | undefined;
   constructor(projectId: string, currentProject: () => Project,
-    options: {outputDirectory: string; clock?: () => string} | (() => string) = () => new Date().toISOString()) {
+    options: {outputDirectory: string; clock?: () => string; ownerSourceRef?: string} | (() => string) = () => new Date().toISOString()) {
     this.projectId = projectId;
     this.currentProject = currentProject;
     this.clock = typeof options === "function" ? options : options.clock ?? (() => new Date().toISOString());
     this.outputDirectory = typeof options === "function" ? undefined : options.outputDirectory;
+    this.ownerSourceRef = typeof options === "function" ? undefined : options.ownerSourceRef;
   }
 
   show(input: unknown): PrototypePreview {
     return this.remember(this.checkedPreview(input));
+  }
+
+  /** Default entry for the authenticated host after the project interview. */
+  startDesign(draft: unknown) {
+    const project = this.currentProject();
+    requireCondition(project.project_id === this.projectId, "PROTOTYPE_PREVIEW_CHANGED");
+    const route = defaultPrototypeDesignFlow(project);
+    if (route === "STANDARD") return {route};
+    this.preview = prototypePreview(project, draft, this.choices);
+    return {route, preview: structuredClone(this.preview)};
   }
 
   async answerChoices(displayedSnapshotId: string, answers: Record<string, string>,
@@ -180,7 +195,7 @@ export class DreamKidsDocumentSession {
     const store = this.outputDirectory ? openPrototypeConfirmationStore(this.outputDirectory) : new MemoryProjectStore();
     const records = new ProjectService(store, () => at);
     try {
-      const project = projection(source, preview, records);
+      const project = projection(source, preview, records, this.ownerSourceRef);
       const service = new XSpecService(undefined, records);
       const result = this.outputDirectory ? service.finalizeForExport(project) : undefined;
       const artifact = result?.artifact ?? service.compile(project);

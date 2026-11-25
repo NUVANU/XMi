@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.4 — 2026-11-25
+
+- Native finalization, numbered document pages and bound short replies.
+- Lossless formal-review material, frozen-ID receipt validation and matching receipt recovery.
+- Optional configured Windows formal-review launcher and PreCompact/PostCompact context checkpoints.
+- Retained public packaging, parser provenance and portable path checks; private-project replay cases excluded.
+- Source update only; fixed v0.1.3 assets remain unchanged. See [update scope](docs/public/UPDATE-20261125.md).
+
 ## 0.1.3 (2026-11-22)
 
 - Publishes the current checklist-preflight, incremental-context, blueprint-reuse and optional local prototype update as a fixed source and lightweight release.

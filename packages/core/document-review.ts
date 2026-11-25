@@ -141,7 +141,8 @@ export function documentReviewMaterial(bundle: ReviewBundle, interviewModule?: s
       .map(({id, scope_ids, minimum_mode, resolution, rationale}) => ({id, scope_ids, minimum_mode, resolution, rationale}))};
 }
 
-export function collectDocumentReview(bundle: ReviewBundle, interviewModule: string | undefined, value: unknown) {
+export function collectDocumentReview(bundle: ReviewBundle, interviewModule: string | undefined, value: unknown,
+  observed?: {path: string; content: string}[]) {
   requireCondition(Buffer.byteLength(canonical(value)) <= 256 * 1024, "DOCUMENT_REVIEW_OUTPUT_TOO_LARGE");
   const parsed = documentReviewInputSchema.safeParse(value);
   requireCondition(parsed.success, "DOCUMENT_REVIEW_RESPONSE_INVALID");
@@ -152,9 +153,10 @@ export function collectDocumentReview(bundle: ReviewBundle, interviewModule: str
     const result = rawFinding.safeParse(value);
     if (!result.success) {notes.push(`第${index + 1}条意见内容或引用格式不完整，未列入可核对意见。`); continue;}
     const f = result.data;
+    const wasRead = (path: string, quote: string) => !observed || observed.some(d => d.path === path && d.content.includes(quote));
     const citations = f.evidence.map(e => {
-      if ("file_path" in e) return material.documents.some(d => d.path === e.file_path && d.content.includes(e.quote)) ? e : null;
-      const item = known.get(e.item_id), doc = material.documents.find(d => d.content.includes(e.quote));
+      if ("file_path" in e) return wasRead(e.file_path, e.quote) && material.documents.some(d => d.path === e.file_path && d.content.includes(e.quote)) ? e : null;
+      const item = known.get(e.item_id), doc = material.documents.find(d => d.content.includes(e.quote) && wasRead(d.path, e.quote));
       return item?.statement.includes(e.quote) && doc ? {file_path: doc.path, quote: e.quote} : null;
     });
     if (citations.some(e => e === null)) {notes.push(`第${index + 1}条意见的引用未能在所给材料核对，需补充材料；其余意见保留。`); continue;}

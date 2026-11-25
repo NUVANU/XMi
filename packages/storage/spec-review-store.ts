@@ -67,6 +67,7 @@ export class SqliteSpecReviewStore {
         run.product_model_version === bundle.product_model_version && run.policy_sha256 === bundle.policy_sha256 &&
         (last ? transitions[last.state].includes(run.state) && run.execution_kind === last.execution_kind &&
           canonical(run.host ?? null) === canonical(last.host ?? null) : run.state === "PREPARED"), "SPEC_REVIEW_STORE_CORRUPT");
+      requireCondition(!bundle.material_kind || run.host?.purpose === "DOCUMENT_REVIEW" && run.host.numbered_pages, "SPEC_REVIEW_STORE_CORRUPT");
       if (run.response) {
         const advisory = run.host?.purpose === "DOCUMENT_REVIEW";
         if (advisory) validateDocumentReview(bundle, run.host!.interview_module, run.response);
@@ -90,6 +91,13 @@ export class SqliteSpecReviewStore {
       AND json_extract(e.body,'$.host.interview_module') IS NULL ORDER BY r.rowid DESC LIMIT 1`).get(projectId);
     return row ? this.get(projectId, String(row.run_id)) : null;
   }
+  currentNumberedDocumentReview(projectId: string, modelVersion: number, modelHash: string, module?: string): StoredSpecReview | null {
+    const row = this.db.prepare(`SELECT r.run_id FROM review_requests r JOIN review_events e ON e.run_id=r.run_id AND e.seq=1
+      JOIN review_bundles b ON b.id=r.bundle_id WHERE r.project_id=? AND json_extract(e.body,'$.host.numbered_pages')=1
+      AND json_extract(e.body,'$.product_model_version')=? AND json_extract(e.body,'$.host.interview_module') IS ?
+      AND json_extract(b.body,'$.model_sha256')=? ORDER BY r.rowid DESC LIMIT 1`).get(projectId, modelVersion, module ?? null, modelHash);
+    return row ? this.get(projectId, String(row.run_id)) : null;
+  }
   previousCompletedDocumentReview(projectId: string, modelVersion: number): StoredSpecReview | null {
     const row = this.db.prepare(`SELECT r.run_id FROM review_requests r JOIN review_events e ON e.run_id=r.run_id AND e.seq=3
       WHERE r.project_id=? AND json_extract(e.body,'$.host.purpose')='DOCUMENT_REVIEW'
@@ -99,6 +107,7 @@ export class SqliteSpecReviewStore {
     return row ? this.get(projectId, String(row.run_id)) : null;
   }
   prepare(bundle: ReviewBundle, key: string, host?: HostReviewBinding): StoredSpecReview {
+    requireCondition(!bundle.material_kind || host?.purpose === "DOCUMENT_REVIEW" && host.numbered_pages, "SPEC_REVIEW_BUNDLE_INVALID");
     validateReviewBundle(bundle);
     requireCondition(key.length > 0 && key.length <= 100, "SPEC_REVIEW_REQUEST_INVALID");
     requireCondition(Buffer.byteLength(canonical(bundle)) <= 8 * 1024 * 1024, "SPEC_REVIEW_INPUT_TOO_LARGE");
@@ -106,6 +115,10 @@ export class SqliteSpecReviewStore {
       const existing = this.find(bundle.project_id, key);
       if (existing) {requireCondition(existing.bundle.bundle_sha256 === bundle.bundle_sha256 &&
         existing.run.execution_kind === (host ? "HOST_AGENT" : "TEST_ONLY"), "IDEMPOTENCY_KEY_REUSED"); return existing;}
+      if (host?.numbered_pages) {
+        const existingReview = this.currentNumberedDocumentReview(bundle.project_id, bundle.product_model_version, bundle.model_sha256, host.interview_module);
+        if (existingReview) return existingReview;
+      }
       this.db.prepare("INSERT OR IGNORE INTO review_bundles VALUES (?,?)").run(bundle.bundle_sha256, canonical(bundle));
       const run: SpecReviewRun = {schema_version: "XMI-REVIEW-RUN/1", run_id: randomUUID(), project_id: bundle.project_id,
         product_model_version: bundle.product_model_version, bundle_sha256: bundle.bundle_sha256, policy_sha256: bundle.policy_sha256,

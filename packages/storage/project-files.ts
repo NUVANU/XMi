@@ -1,7 +1,12 @@
 import {existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, unlinkSync, writeFileSync} from "node:fs";
 import {dirname, isAbsolute, join, parse, relative, resolve} from "node:path";
 import {randomUUID} from "node:crypto";
+import {z} from "zod";
 import {requireCondition} from "../core/errors.ts";
+
+export const localProjectManifestSchema = z.strictObject({schema_version: z.literal("XMI-LOCAL-PROJECT/1"),
+  project_id: z.string().regex(/^XMI-[A-Z0-9-]+$/u).nullable(), create_hash: z.string().regex(/^[a-f0-9]{64}$/u),
+  database: z.literal("xmi-state.sqlite")});
 
 /** Normalize the chosen local directory without creating anything before consent. */
 export function projectDirectory(path: string) {

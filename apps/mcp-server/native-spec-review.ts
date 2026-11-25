@@ -1,10 +1,13 @@
 import {closeSync, existsSync, fstatSync, globSync, openSync, readSync, realpathSync} from "node:fs";
-import {dirname, isAbsolute, join, relative, resolve} from "node:path";
+import {basename, dirname, isAbsolute, join, relative, resolve} from "node:path";
 import {createHash} from "node:crypto";
 import {DatabaseSync} from "node:sqlite";
+import {fileURLToPath} from "node:url";
 import {requireCondition} from "../../packages/core/errors.ts";
 import type {HostReviewBinding} from "../../packages/core/spec-review-service.ts";
 import {buildReviewTransport, reviewPagePath, transportLimits, verifyReviewPages} from "./review-transport.ts";
+import {documentPageCommand, missingDocumentPage, numberedDocumentPages} from "./document-pages.ts";
+import type {NumberedDocumentPacket} from "./document-pages.ts";
 
 const uuid = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
 const digest = (text: string | Uint8Array) => createHash("sha256").update(text).digest("hex");
@@ -99,11 +102,101 @@ function agentFinal(text: unknown, agentPath: string): string {
 export function materialReadCommand(path: string): string {
   return `Get-Content -LiteralPath '${path.replaceAll("'", "''")}' -Raw`;
 }
+export function documentPageReadCommand(path: string): string {
+  return `${materialReadCommand(path)} -ErrorAction Stop`;
+}
 function exactPageOutput(value: unknown, page: string): boolean {
   return typeof value === "string" && (value === page || value === page + "\n" || value === page + "\r\n");
 }
+function deliveredText(row: Row, callId: unknown): string | undefined {
+  const output = row.payload.output as {type: string; text: string}[];
+  if (row.payload.call_id === callId && Array.isArray(output) && output.length === 2 &&
+    output.every(block => block.type === "input_text" && typeof block.text === "string") &&
+    /^Script completed\nWall time [\d.]+ seconds\nOutput:\n$/u.test(output[0]!.text)) return output[1]!.text;
+  return undefined;
+}
+function missingLiteralPage(read: Record<string, unknown>, pagePath: string, delivered: string | undefined): boolean {
+  if (read.status !== "failed" || read.exit_code !== 1 || !Array.isArray(read.command)) return false;
+  const command: unknown = read.command.at(-1);
+  const expected = documentPageReadCommand(pagePath), name = basename(dirname(pagePath));
+  const nameStart = expected.lastIndexOf(name);
+  const prefix = expected.slice(0, nameStart), suffix = expected.slice(nameStart + name.length);
+  if (typeof command !== "string" || !command.startsWith(prefix) || !command.endsWith(suffix)) return false;
+  const attemptedName = command.slice(prefix.length, -suffix.length);
+  if (!/^[a-f0-9]{16,128}\.json\.pages$/u.test(attemptedName)) return false;
+  const attemptedPath = pagePath.replace(name + "/", attemptedName + "/");
+  const error = read.aggregated_output;
+  if (typeof error !== "string" || error.length > 2000 || !exactPageOutput(delivered, error) || !error.startsWith("Get-Content:")) return false;
+  return error.trimEnd().endsWith(`Cannot find path '${attemptedPath}' because it does not exist.`);
+}
+
+function nativePageTrace(childRows: Row[], maxAttempts: number) {
+  const trace = childRows.filter(r => r.type === "response_item" &&
+    ["function_call", "custom_tool_call", "function_call_output", "custom_tool_call_output"].includes(String(r.payload.type)) ||
+    r.type === "event_msg" && r.payload.type === "item_completed" &&
+    (r.payload.item as {type?: string})?.type === "CommandExecution");
+  requireCondition(trace.length <= maxAttempts * 3 && trace.length % 3 === 0, "HOST_REVIEW_UNEXPECTED_TOOL");
+  const seenCalls = new Set<string>();
+  const attempts: {read: Record<string, unknown>; delivered: string | undefined}[] = [];
+  for (let i = 0; i < trace.length; i += 3) {
+    const [call, execution, delivery] = trace.slice(i, i + 3) as [Row, Row, Row];
+    const callId = call.payload.call_id;
+    requireCondition(call.payload.type === "custom_tool_call" && call.payload.name === "exec" &&
+      [undefined, "functions"].includes(call.payload.namespace as string | undefined) && typeof callId === "string" && !seenCalls.has(callId) &&
+      execution.type === "event_msg" && delivery.payload.type === "custom_tool_call_output" && delivery.payload.call_id === callId,
+    "HOST_REVIEW_UNEXPECTED_TOOL");
+    seenCalls.add(callId);
+    attempts.push({read: execution.payload.item as Record<string, unknown>, delivered: deliveredText(delivery, callId)});
+  }
+  return attempts;
+}
+
+function verifyDocumentPageReads(childRows: Row[], binding: HostReviewBinding, pages: string[]): void {
+  let page = 0, retried = false;
+  for (const {read, delivered} of nativePageTrace(childRows, pages.length * 2)) {
+    requireCondition(page < pages.length, "HOST_REVIEW_UNEXPECTED_TOOL");
+    const path = reviewPagePath(binding.material_path, page);
+    if (!retried && missingLiteralPage(read, path, delivered)) {retried = true; continue;}
+    requireCondition(Array.isArray(read.command) && read.command.at(-1) === documentPageReadCommand(path), "HOST_REVIEW_UNEXPECTED_TOOL");
+    requireCondition(read.status === "completed" && exactPageOutput(read.aggregated_output, pages[page]!), "HOST_REVIEW_DELIVERY_INCOMPLETE");
+    requireCondition(exactPageOutput(delivered, pages[page]!), "HOST_REVIEW_TOOL_DELIVERY_INCOMPLETE");
+    page++;
+    retried = false;
+  }
+  requireCondition(page === pages.length, "HOST_REVIEW_DELIVERY_INCOMPLETE");
+}
+
+function verifyNumberedPages(childRows: Row[], binding: HostReviewBinding, packet: NumberedDocumentPacket): number[] {
+  const pages = numberedDocumentPages(packet);
+  const seen = new Set<number>();
+  const workdir = binding.material_path + ".pages";
+  let missed: number | null = null;
+  for (const {read, delivered} of nativePageTrace(childRows, pages.length * 2)) {
+    const command: unknown = Array.isArray(read.command) ? read.command.at(-1) : undefined;
+    const number = typeof command === "string" ? /Join-Path \$PWD '(\d{1,4})\.txt'/u.exec(command)?.[1] : undefined;
+    const page = number === undefined ? -1 : Number(number);
+    const cwd = typeof read.cwd === "string" ? read.cwd.startsWith("file:") ? fileURLToPath(read.cwd) : read.cwd : "";
+    requireCondition(page >= 0 && command === documentPageCommand(page) && cwd && relative(workdir, cwd) === "" &&
+      read.status === "completed" && read.exit_code === 0, "HOST_REVIEW_UNEXPECTED_TOOL");
+    if (exactPageOutput(read.aggregated_output, missingDocumentPage(page)) && exactPageOutput(delivered, missingDocumentPage(page))) {
+      requireCondition(missed === null, "HOST_REVIEW_DELIVERY_INCOMPLETE");
+      missed = page;
+      continue;
+    }
+    const expected = pages[page - 1];
+    requireCondition(expected !== undefined && (seen.size > 0 || page === 1), "HOST_REVIEW_UNEXPECTED_TOOL");
+    requireCondition(exactPageOutput(read.aggregated_output, expected) && exactPageOutput(delivered, expected), "HOST_REVIEW_TOOL_DELIVERY_INCOMPLETE");
+    if (seen.has(page)) continue;
+    seen.add(page);
+    missed = null;
+  }
+  requireCondition(seen.has(1) && missed === null && packet.pages.every((page, i) => !page.required || seen.has(i + 2)),
+    "HOST_REVIEW_DELIVERY_INCOMPLETE");
+  return [...seen];
+}
+
 export function observeNativeReview(root: string, binding: HostReviewBinding, packet: string):
-  {state: "AWAITING_AGENT" | "RUNNING"} | {state: "COMPLETED"; response: unknown; agent_id: string; response_sha256: string} {
+  {state: "AWAITING_AGENT" | "RUNNING"} | {state: "COMPLETED"; response: unknown; agent_id: string; response_sha256: string; observedPages?: number[]} {
   const parent = below(root, resolve(root, binding.parent_log));
   requireCondition(header(parent).id === binding.session_id && anchor(parent, binding.parent_offset) === binding.parent_anchor,
     "HOST_REVIEW_LOG_REPLACED");
@@ -152,8 +245,24 @@ export function observeNativeReview(root: string, binding: HostReviewBinding, pa
     "HOST_REVIEW_RESULT_SOURCE_MISMATCH");
   const commands = childRows.filter(r => r.type === "event_msg" && r.payload.type === "item_completed")
     .map(r => r.payload.item as Record<string, unknown>);
+  let observedPages: number[] | undefined;
+  if (binding.purpose === "DOCUMENT_REVIEW" && binding.numbered_pages) {
+    observedPages = verifyNumberedPages(childRows, binding, JSON.parse(packet));
+  } else {
+    const pages = binding.transport ? buildReviewTransport(packet).pages : [packet];
+    if (binding.purpose === "DOCUMENT_REVIEW" && binding.transport && binding.page_read_recovery === "LITERAL_PATH_RETRY_V1") {
+      verifyDocumentPageReads(childRows, binding, pages);
+      verifyReviewPages(pages, binding.transport, packet);
+    } else verifyStrictPageReads(childRows, commands, binding, pages, packet);
+  }
+  requireCondition(commands.every(item => !item?.type || ["CommandExecution", "Reasoning", "AgentMessage"].includes(String(item.type))),
+    "HOST_REVIEW_UNEXPECTED_ACTIVITY");
+  return {state: "COMPLETED", response: JSON.parse(outputs[0]!), agent_id: agentId, response_sha256: digest(outputs[0]!), observedPages};
+}
+
+function verifyStrictPageReads(childRows: Row[], commands: Record<string, unknown>[], binding: HostReviewBinding,
+  pages: string[], packet: string): void {
   const reads = commands.filter(item => item?.type === "CommandExecution");
-  const pages = binding.transport ? buildReviewTransport(packet).pages : [packet];
   requireCondition(reads.every((item, i) => Array.isArray(item.command) &&
     item.command.at(-1) === materialReadCommand(binding.transport ? reviewPagePath(binding.material_path, i) : binding.material_path)),
     "HOST_REVIEW_UNEXPECTED_TOOL");
@@ -172,10 +281,7 @@ export function observeNativeReview(root: string, binding: HostReviewBinding, pa
     const deliveries = childRows.filter(r => r.type === "response_item" && r.payload.type === "custom_tool_call_output");
     requireCondition(new Set(toolCalls.map(r => r.payload.call_id)).size === pages.length &&
       deliveries.length === pages.length && deliveries.every((r, i) => {
-      const output = r.payload.output as {type: string; text: string}[];
-      return r.payload.call_id === toolCalls[i]!.payload.call_id && Array.isArray(output) && output.length === 2 &&
-        output.every(b => b.type === "input_text" && typeof b.text === "string") &&
-        /^Script completed\nWall time [\d.]+ seconds\nOutput:\n$/u.test(output[0]!.text) && exactPageOutput(output[1]!.text, pages[i]!);
+      return exactPageOutput(deliveredText(r, toolCalls[i]!.payload.call_id), pages[i]!);
     }), "HOST_REVIEW_TOOL_DELIVERY_INCOMPLETE");
     const counts = childRows.filter(r => r.type === "event_msg" && r.payload.type === "token_count");
     requireCondition(binding.purpose === "DOCUMENT_REVIEW" || counts.length > 0 && counts.every(r => {
@@ -184,7 +290,4 @@ export function observeNativeReview(root: string, binding: HostReviewBinding, pa
         info.last_token_usage.total_tokens <= info.model_context_window - 32768;
     }), "HOST_REVIEW_CONTEXT_CAPACITY_UNVERIFIED");
   }
-  requireCondition(commands.every(item => !item?.type || ["CommandExecution", "Reasoning", "AgentMessage"].includes(String(item.type))),
-    "HOST_REVIEW_UNEXPECTED_ACTIVITY");
-  return {state: "COMPLETED", response: JSON.parse(outputs[0]!), agent_id: agentId, response_sha256: digest(outputs[0]!)};
 }

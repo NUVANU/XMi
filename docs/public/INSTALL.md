@@ -50,3 +50,7 @@ Use the fixed [v0.1.3 source or lightweight release](https://github.com/NUVANU/X
 Back up the existing database and preserve its project ID and routing before switching the source entry. The additive blueprint-binding event needs a current reader; do not point an older reader at updated data. Keep the pre-upgrade backup for rollback. Do not overwrite a running database or use the first-use helper to take over an existing one.
 
 The generated Codex plugin now includes **Stop** and **UserPromptSubmit** hooks. Review/trust the changed hooks through the supported host UI, regenerate the plugin configuration where appropriate, and reconnect. Stop only checks delivery of the pending checklist; it does not grant consent. Replacing files does not prove an already-open session reloaded them. 原型适配器需要本地宿主显式接入，普通 Codex 安装无需开启它。
+
+## 2026-11-25 source update / 最新源码
+
+Current source is V0.1.4. Download main or a checkout and record its commit; the fixed v0.1.3 Release is older. Review PreCompact/PostCompact in addition to the confirmation hooks before reconnecting. Optional Windows formal review requires trusted configuration and appropriate authorization; installing the plugin alone does not enable it. See [UPDATE-20261125.md](UPDATE-20261125.md) for configuration, privacy and rollback boundaries.

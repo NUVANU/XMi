@@ -10,18 +10,26 @@ export const designScopeReminder = "XMi 设计会话范围：当前目标是完�
 
 export const isDesignScopeExit = (prompt: string) => /^(?:退出\s*XMi\s*设计模式|停用\s*XMi)[。.!！]?$/i.test(prompt.trim());
 
+function readScope(directory: string, session: string) {
+  const path = join(directory, session + ".scope.json");
+  if (!existsSync(path)) return null;
+  if (statSync(path).size > 1024) throw new Error("INVALID_DESIGN_SCOPE");
+  const scope = scopeSchema.parse(JSON.parse(readFileSync(path, "utf8")));
+  if (scope.session_id !== session) throw new Error("INVALID_DESIGN_SCOPE");
+  return scope;
+}
+
+export function designScopeActive(directory: string, session: string) {
+  return readScope(directory, z.string().regex(sessionPattern).parse(session))?.active === true;
+}
+
 // Guidance only, never an approval or a host-tool permission boundary. Only a
 // genuine native user event (or a prior review in that session) activates it.
 // Keep a boolean per session; never retain the user prompt or design contents.
 export function designScopeContext(event: {session_id: string; prompt: string}, directory: string, existingReview: boolean) {
   const session = z.string().regex(sessionPattern).parse(event.session_id);
-  const path = join(directory, session + ".scope.json");
-  let scope: z.infer<typeof scopeSchema> | null = null;
-  if (existsSync(path)) {
-    if (statSync(path).size > 1024) throw new Error("INVALID_DESIGN_SCOPE");
-    scope = scopeSchema.parse(JSON.parse(readFileSync(path, "utf8")));
-    if (scope.session_id !== session) throw new Error("INVALID_DESIGN_SCOPE");
-  }
+  const prior = readScope(directory, session);
+  let scope = prior;
   const prompt = event.prompt.trim();
   // Deliberately anchored: quoted material, code, imported documents and casual
   // mentions of XMi must not switch an engineering or unrelated conversation.
@@ -30,7 +38,7 @@ export function designScopeContext(event: {session_id: string; prompt: string}, 
   if (exit) scope = {session_id: session, active: false, source: "USER_EXIT"};
   else if (activate) scope = {session_id: session, active: true, source: "USER_ACTIVATION"};
   else if (!scope && existingReview) scope = {session_id: session, active: true, source: "EXISTING_REVIEW"};
-  if (exit || activate || (scope?.source === "EXISTING_REVIEW" && !existsSync(path))) {
+  if (scope && scope !== prior) {
     writeRecord(directory, session + ".scope", scope);
   }
   if (exit) return "XMi 设计模式已退出，后续按用户当前任务处理；这不确认任何设计条目，不改变项目数据。";

@@ -8,7 +8,9 @@ import { createModuleReviewRouter } from "../local-module-review/adapter.ts";
 import { moduleReviewDirectory } from "../local-module-review/hook.ts";
 import {codexReviewPaths} from "../local-module-review/host-paths.ts";
 import { createSingleReviewRouter } from "../local-module-review/single.ts";
+import {createNativePrototypeRouter} from "../local-module-review/prototype.ts";
 import {DocumentReviewRunner} from "./document-review.ts";
+import {FormalReviewReceipts} from "./formal-review-receipt.ts";
 import {ProjectWorkspaces} from "./project-workspaces.ts";
 import {projectPath} from "../../packages/storage/project-files.ts";
 import type {HybridConnector} from "../../packages/cloud-access/connector.ts";
@@ -29,12 +31,15 @@ async function main(nativeReview: boolean, hybrid?: HybridConnector) {
   const hostSpecReview = nativeReview ? new DocumentReviewRunner({directory: join(dirname(path), "xmi-spec-reviews"),
     sessions: codexReviewPaths().sessions, native: moduleReviewDirectory()}) : undefined;
   const workspaces = new ProjectWorkspaces(join(dirname(path), "xmi-project-locations.sqlite"));
-  const server = createXmiServer(service, {storagePath: path, moduleReview, singleReview, hostSpecReview, workspaces, hybrid,
+  const formalReviews = nativeReview && process.platform === "win32" ? new FormalReviewReceipts(join(dirname(path), "xmi-formal-reviews")) : undefined;
+  const server = createXmiServer(service, {storagePath: path, moduleReview, singleReview, hostSpecReview, formalReviews, workspaces, hybrid,
     dreamKidsPrototype: process.env.XMI_DREAMKIDS_PROTOTYPE === "1",
+    nativePrototype: nativeReview && !hybrid ? createNativePrototypeRouter(moduleReviewDirectory(), path) : undefined,
     workspaceOptions: binding => {
       const reviewer = nativeReview ? new DocumentReviewRunner({directory: projectPath(binding.root, ".xmi", "reviews"),
         sessions: codexReviewPaths().sessions, native: moduleReviewDirectory()}) : undefined;
-      return {options: {storagePath: binding.database, projectDirectory: binding.root, hostSpecReview: reviewer,
+      return {options: {storagePath: binding.database, projectDirectory: binding.root, hostSpecReview: reviewer, formalReviews,
+        nativePrototype: nativeReview && !hybrid ? createNativePrototypeRouter(moduleReviewDirectory(), binding.database) : undefined,
         moduleReview: nativeReview ? createModuleReviewRouter(moduleReviewDirectory(), binding.database, process.env.CODEX_THREAD_ID, binding.service) : undefined,
         singleReview: nativeReview ? createSingleReviewRouter(moduleReviewDirectory(), binding.database, process.env.CODEX_THREAD_ID, binding.service) : undefined},
         close: () => reviewer?.close()};

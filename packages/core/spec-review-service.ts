@@ -9,6 +9,8 @@ import {XSpecService, XSPEC_PACKAGE_FILES} from "./xspec-service.ts";
 import type {CompiledArtifact} from "./xspec-service.ts";
 import type {M8ReadinessEvidence} from "./completeness-service.ts";
 import {documentReviewResponseSchema} from "./document-review.ts";
+import type {ProjectService} from "./project-service.ts";
+import {compactFormalMaterial, expandFormalMaterial} from "./formal-review-material.ts";
 
 const hash = z.string().regex(/^[a-f0-9]{64}$/);
 const id = z.string().min(1).max(100);
@@ -21,6 +23,7 @@ export const reviewArtifactSchema = z.strictObject({spec_id: id, spec_version: z
 export const reviewScopeSchema = z.strictObject({id, scope_ids: z.array(id), minimum_mode: modeSchema,
   resolution: z.enum(["UPGRADE_SCOPE", "UPGRADE_PROJECT", "STUB_OR_SANDBOX", "DEFER_OR_EXCLUDE"])});
 export const reviewBundleSchema = z.strictObject({schema_version: z.literal("XMI-REVIEW-BUNDLE/1"),
+  material_kind: z.literal("DOCUMENT_REFERENCE").optional(),
   project_id: id, product_model_version: z.number().int().positive(), model_sha256: hash,
   policy_sha256: hash, candidate_sha256: hash, projection_sha256: hash,
   model: z.unknown(), candidate: reviewArtifactSchema,
@@ -28,6 +31,7 @@ export const reviewBundleSchema = z.strictObject({schema_version: z.literal("XMI
   required_ids: z.array(id), scope_requirements: z.array(reviewScopeSchema),
   bundle_sha256: hash, egress_approved: z.literal(false)});
 export type ReviewBundle = z.infer<typeof reviewBundleSchema>;
+export type ReviewHistorySource = Pick<ProjectService, "history">;
 export const specReviewFindingSchema = z.strictObject({id, severity: z.enum(["BLOCKING", "WARNING", "INFO"]),
   affected_ids: z.array(id).min(1), statement: meaningful(2000),
   evidence: z.array(z.union([z.strictObject({item_id: id, quote: meaningful(400)}),
@@ -42,6 +46,8 @@ export const hostReviewBindingSchema = z.strictObject({session_id: z.string().uu
   parent_offset: z.number().int().nonnegative(), parent_anchor: hash,
   material_path: z.string().min(1).max(2000), packet_sha256: hash,
   purpose: z.literal("DOCUMENT_REVIEW").optional(), interview_module: z.string().min(1).max(100).optional(),
+  page_read_recovery: z.literal("LITERAL_PATH_RETRY_V1").optional(),
+  numbered_pages: z.literal(true).optional(),
   transport: z.strictObject({schema_version: z.literal("XMI-REVIEW-TRANSPORT/1"), encoded_sha256: hash,
     encoding: z.enum(["DICTIONARY", "JSON_TEXT"]).optional(),
     page_sha256: z.array(hash).min(1).max(64)}).optional()});
@@ -92,7 +98,11 @@ export function reviewPolicyFingerprint(): string {
     "packages/core/solution-feasibility.ts", "packages/core/solution-options.ts", "packages/core/m11-assurance-mechanisms.ts",
     "packages/shared-types/domain.ts", "packages/storage/spec-review-store.ts", "apps/mcp-server/spec-review-runner.ts",
     "apps/mcp-server/contracts.ts", "apps/mcp-server/server.ts", "apps/mcp-server/main.ts",
-    "apps/mcp-server/host-spec-review.ts", "apps/mcp-server/native-spec-review.ts", "apps/mcp-server/review-transport.ts",
+    "apps/mcp-server/host-spec-review.ts", "apps/mcp-server/native-spec-review.ts", "apps/mcp-server/review-transport.ts", "apps/mcp-server/document-pages.ts",
+    "apps/mcp-server/formal-review-turn.ts", "apps/mcp-server/formal-review-receipt.ts", "apps/mcp-server/windows-formal-review.ts",
+    "apps/mcp-server/formal-review-anchors.ts", "apps/mcp-server/prior-formal-policy.ts", "apps/mcp-server/windows-launcher.ts",
+    "packages/core/formal-review-material.ts",
+    "apps/windows-formal-review/IsolatedLauncher.cs", "apps/windows-formal-review/Worker.cs",
     "packages/core/spec-review-preflight.ts", "tools/spec-review-preflight.mjs", "packages/core/document-review.ts", "apps/mcp-server/document-review.ts",
     "schemas/xmi-project.schema.json", "schemas/xspec.schema.json", "schemas/xspec-v0.2.schema.json",
     "docs/public/producer-evidence.schema.json", "package-lock.json"];
@@ -100,11 +110,13 @@ export function reviewPolicyFingerprint(): string {
     files: paths.map(path => [path, sha(readFileSync(new URL(path, root)))])});
 }
 const sha = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
+const redactSource = (source: {type: string; ref: string}) =>
+  ({type: source.type, ref: `SRC-${fingerprint({type: source.type, ref: source.ref})}`});
 export function withoutSources(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(withoutSources);
   if (!value || typeof value !== "object") return value;
   return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, key === "source_refs" && Array.isArray(entry)
-    ? entry.map(source => ({type: source.type, ref: `SRC-${fingerprint({type: source.type, ref: source.ref})}`})) : withoutSources(entry)]));
+    ? entry.map(redactSource) : withoutSources(entry)]));
 }
 function projection(artifact: CompiledArtifact): string {
   const xspec = JSON.parse(artifact.files.find(f => f.path === "xspec.json")!.content);
@@ -116,13 +128,61 @@ function projection(artifact: CompiledArtifact): string {
   if (manifest.producer_evidence) delete manifest.producer_evidence.subject.canonical_xspec_sha256;
   return fingerprint({xspec, manifest, files: artifact.files.filter(f => !["xspec.json", "manifest.json", "READINESS-REPORT.md"].includes(f.path))});
 }
-export function buildReviewBundle(project: Project): ReviewBundle {
+export function buildReviewBundle(project: Project, materialKind?: "DOCUMENT_REFERENCE", history?: ReviewHistorySource): ReviewBundle {
   validateProject(project);
-  const model = structuredClone(project), service = new XSpecService(), candidate = service.compile(model);
+  const model = structuredClone(project), events = history?.history(project.project_id);
+  const service = new XSpecService(undefined, events ? {history: () => events} : undefined);
+  const candidate = service.compile(model);
   requireCondition(service.validate(model, candidate).package_valid, "SPEC_REVIEW_PACKAGE_INVALID");
   const required_ids = model.items.filter(item => item.status !== "REJECTED" && item.status !== "SUPERSEDED").map(item => item.id).sort();
   const scope_requirements = (model.delivery_policy?.risk_overrides ?? []).filter(o => o.status === "CONFIRMED")
     .map(o => ({id: o.id, scope_ids: [...o.scope_ids].sort(), minimum_mode: o.minimum_mode, resolution: o.resolution})).sort((a, b) => a.id.localeCompare(b.id));
+  const raw = materialKind === "DOCUMENT_REFERENCE"
+    ? canonical({schema_version: "XMI-DOCUMENT-REFERENCE/1", candidate_sha256: candidate.canonical_sha256})
+    : strictReviewMaterial(model, candidate, required_ids, scope_requirements, !!events);
+  const material = !materialKind && events && Buffer.byteLength(raw) > reviewLimits.input_bytes
+    ? compactFormalMaterial(expandFormalMaterial(JSON.parse(raw))) : raw;
+  requireCondition(Buffer.byteLength(material) <= reviewLimits.input_bytes, "SPEC_REVIEW_INPUT_TOO_LARGE");
+  const body = {schema_version: "XMI-REVIEW-BUNDLE/1" as const, ...(materialKind ? {material_kind: materialKind} : {}),
+    project_id: model.project_id, product_model_version: model.model_version,
+    model_sha256: fingerprint(model), policy_sha256: reviewPolicyFingerprint(), candidate_sha256: candidate.canonical_sha256,
+    projection_sha256: projection(candidate), model, candidate, material, material_sha256: sha(material),
+    material_bytes: Buffer.byteLength(material), required_ids, scope_requirements, egress_approved: false as const};
+  return reviewBundleSchema.parse({...body, bundle_sha256: fingerprint(body)});
+}
+
+const deliveryGateIds = new Set(["RG-AUDIT", "RG-SPEC-REVIEW", "RG-CONSUMER", "RG-EXPORT", "RG-PRODUCT-AUDIT-EVIDENCE"]);
+function formalReviewProjection(candidate: CompiledArtifact) {
+  const spec = JSON.parse(candidate.files.find(f => f.path === "xspec.json")!.content);
+  const {hard_gates, target_mode, target_level} = spec.readiness as {
+    hard_gates: {id: string; passed: boolean; details: string}[]; target_mode: string; target_level: string;
+  };
+  delete spec.readiness;
+  delete spec.integrity;
+  const manifest = JSON.parse(candidate.files.find(f => f.path === "manifest.json")!.content);
+  delete manifest.file_sha256;
+  delete manifest.canonical_xspec_sha256;
+  type EventReference = {owner_source_ref: {type: string; ref: string}} | null;
+  const proof = manifest.producer_evidence as {subject: {canonical_xspec_sha256?: string};
+    mode_selection: {event: EventReference}; item_confirmations: {event: EventReference}[]; scope_dispositions: {event: EventReference}[]};
+  delete proof.subject.canonical_xspec_sha256;
+  for (const {event} of [proof.mode_selection, ...proof.item_confirmations, ...proof.scope_dispositions]) {
+    if (event) event.owner_source_ref = redactSource(event.owner_source_ref);
+  }
+  return new Map([
+    ["xspec.json", canonical(withoutSources(spec))],
+    ["manifest.json", canonical(withoutSources(manifest))],
+    ["READINESS-REPORT.md", [
+      "# Specification review context", "", `- Target mode: ${target_mode}`, `- Target level: ${target_level}`, "",
+      "Independent review, consumer validation and exact export are evaluated separately by M8. Their pending status does not establish a design defect.",
+      "Report actual specification defects and unsupported claims. The source-referenced confirmation records are local evidence, not external certification.", "",
+      ...hard_gates.filter(g => !deliveryGateIds.has(g.id)).map(g => `- ${g.passed ? "PASS" : "NOT PASS"} **${g.id}** — ${g.details}`), "",
+    ].join("\n")],
+  ]);
+}
+
+function strictReviewMaterial(model: Project, candidate: CompiledArtifact, required_ids: string[],
+  scope_requirements: (Omit<ReviewBundle["scope_requirements"][number], "resolution"> & {resolution: string})[], historyBound: boolean) {
   // All active facts/statuses and historical references remain finite and complete.
   // Source locators are logical IDs; this material is NOT approved for external use.
   const included = new Set(required_ids), known = new Set(model.items.map(item => item.id));
@@ -134,31 +194,27 @@ export function buildReviewBundle(project: Project): ReviewBundle {
   let previous = -1;
   while (previous !== included.size) {previous = included.size; model.items.filter(item => included.has(item.id)).forEach(references);}
   const materialModel = {...model, items: model.items.filter(item => included.has(item.id))};
+  const reviewProjection = historyBound ? formalReviewProjection(candidate) : undefined;
   const candidate_files = candidate.files.map(f => {
-    const content = f.path === "xspec.json" ? canonical(withoutSources(JSON.parse(f.content))) : f.content;
+    const content = reviewProjection?.get(f.path) ?? (f.path === "xspec.json" ? canonical(withoutSources(JSON.parse(f.content))) : f.content);
     return {path: f.path, original_sha256: f.sha256, material_sha256: sha(content), content};
   });
-  const material = canonical({model: withoutSources(materialModel), candidate_files,
+  return canonical({model: withoutSources(materialModel), candidate_files,
     candidate_sha256: candidate.canonical_sha256, material_is_original_package: false,
     instructions: reviewInstructions, required_ids, required_files: [...XSPEC_PACKAGE_FILES], scope_requirements});
-  requireCondition(Buffer.byteLength(material) <= reviewLimits.input_bytes, "SPEC_REVIEW_INPUT_TOO_LARGE");
-  const body = {schema_version: "XMI-REVIEW-BUNDLE/1" as const, project_id: model.project_id, product_model_version: model.model_version,
-    model_sha256: fingerprint(model), policy_sha256: reviewPolicyFingerprint(), candidate_sha256: candidate.canonical_sha256,
-    projection_sha256: projection(candidate), model, candidate, material, material_sha256: sha(material),
-    material_bytes: Buffer.byteLength(material), required_ids, scope_requirements, egress_approved: false as const};
-  return reviewBundleSchema.parse({...body, bundle_sha256: fingerprint(body)});
 }
-export function validateReviewBundle(value: unknown, project?: Project): ReviewBundle {
+export function validateReviewBundle(value: unknown, project?: Project, history?: ReviewHistorySource): ReviewBundle {
   const parsed = reviewBundleSchema.safeParse(value);
   requireCondition(parsed.success, "SPEC_REVIEW_BUNDLE_INVALID");
   const b = parsed.data;
   validateProject(b.model);
   requireCondition(!project || b.project_id === project.project_id && b.product_model_version === project.model_version && b.model_sha256 === fingerprint(project), "SPEC_REVIEW_STALE");
   // Rebuild all bindings, including the complete scope set, actual material and policy.
-  requireCondition(canonical(buildReviewBundle(b.model)) === canonical(b), "SPEC_REVIEW_BUNDLE_INVALID");
+  requireCondition(canonical(buildReviewBundle(b.model, b.material_kind, history)) === canonical(b), "SPEC_REVIEW_BUNDLE_INVALID");
   return b;
 }
 export function validateReviewResponse(bundle: ReviewBundle, value: unknown): SpecReviewResponse {
+  requireCondition(!bundle.material_kind, "SPEC_REVIEW_BUNDLE_INVALID");
   requireCondition(Buffer.byteLength(JSON.stringify(value) ?? "") <= reviewLimits.output_bytes, "SPEC_REVIEW_OUTPUT_TOO_LARGE");
   const parsed = specReviewResponseSchema.safeParse(value);
   requireCondition(parsed.success, "SPEC_REVIEW_RESPONSE_INVALID");
@@ -169,7 +225,7 @@ export function validateReviewResponse(bundle: ReviewBundle, value: unknown): Sp
     canonical(response.scope_requirements) === canonical(bundle.scope_requirements), "SPEC_REVIEW_COVERAGE_INCOMPLETE");
   const p = bundle.model as Project;
   const known = new Map(p.items.map(item => [item.id, item]));
-  const materialFiles = new Map<string, string>(JSON.parse(bundle.material).candidate_files.map((f: {path: string; content: string}) => [f.path, f.content]));
+  const materialFiles = new Map(expandFormalMaterial(JSON.parse(bundle.material)).candidate_files.map(f => [f.path, f.content]));
   requireCondition(new Set(response.findings.map(f => f.id)).size === response.findings.length, "SPEC_REVIEW_RESPONSE_INVALID");
   for (const finding of response.findings) {
     requireCondition(finding.affected_ids.every(id => known.has(id)) && finding.evidence.every(e => "item_id" in e

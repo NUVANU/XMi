@@ -31,7 +31,7 @@ test("configured-home STDIO uses one home for native confirmation and independen
   const client=new Client({name:"TEST_ONLY-configured-home",version:"1"});
   try {
     await client.connect(new StdioClientTransport({command:process.execPath,args:[resolve("apps/mcp-server/main.ts"),"--db",db],env,stderr:"pipe"}));
-    assert.equal(client.getServerVersion()!.version,"0.1.3");
+    assert.equal(client.getServerVersion()!.version,"0.1.4");
     const call=async(name:string,args:Record<string,unknown>)=>{
       const r=await client.callTool({name,arguments:{schema_version:"0.1.0",project_id:p.project_id,...args}});
       const v=r.structuredContent as {ok:boolean;data:Record<string,unknown>};assert.equal(v.ok,true,JSON.stringify(v));return v.data;
